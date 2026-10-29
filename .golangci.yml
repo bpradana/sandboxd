@@ -1,0 +1,141 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: false
+
+output:
+  formats:
+    text:
+      path: "stderr"
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+  path-prefix: ""
+  sort-order:
+    - severity
+    - linter
+    - file
+  show-stats: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: "standard"
+  enable:
+    - bodyclose
+    - dogsled
+    - errcheck
+    - errorlint
+    - exhaustive
+    - funlen
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - goheader
+    - gomodguard_v2
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - wastedassign
+    - whitespace
+
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+
+    gocognit:
+      min-complexity: 20
+
+    goconst:
+      min-occurrences: 10
+
+    gocyclo:
+      min-complexity: 15
+
+    godot:
+      scope: declarations
+      exclude:
+        - "^fixme:"
+        - "^todo:"
+
+    lll:
+      line-length: 140
+
+    misspell:
+      locale: US
+
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: if-return
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+
+    staticcheck:
+      checks: ["all"]
+
+  exclusions:
+    rules:
+      # The function-size and complexity linters report 86 pre-existing
+      # findings (worst: cognitive complexity 128 against a threshold of 20).
+      # Splitting those functions is real refactoring work with real behavior
+      # risk, tracked separately rather than folded into a lint pass. Remove
+      # this block as the offenders are broken up.
+      - linters:
+          - funlen
+          - gocognit
+          - gocyclo
+          - nestif
+        path: (^cmd/|^internal/)

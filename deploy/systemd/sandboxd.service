@@ -1,0 +1,28 @@
+[Unit]
+Description=sandboxd - isolated execution environments for AI agents
+Documentation=https://github.com/bpradana/sandboxd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/sandboxd/sandboxd.env
+ExecStart=/usr/local/bin/sandboxdctl start
+# On SIGTERM sandboxd stops serving, then destroys every sandbox.
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=90
+Restart=on-failure
+RestartSec=2
+
+# The engine owns this unit's cgroup subtree: it moves itself into a
+# "daemon" leaf and creates one child cgroup per sandbox.
+Delegate=yes
+
+# Root is required for namespaces, mounts, cgroups, veths, and nftables.
+User=root
+LimitNOFILE=1048576
+TasksMax=infinity
+
+[Install]
+WantedBy=multi-user.target

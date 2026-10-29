@@ -1,0 +1,60 @@
+# Every Go command runs in these containers (development happens on macOS).
+# Both services are privileged with a private cgroup namespace: the engine
+# treats the container's /sys/fs/cgroup as its delegated cgroup root.
+x-sandboxd-common: &sandboxd-common
+  build:
+    context: .
+    target: dev
+  privileged: true
+  cgroup: private
+  security_opt:
+    - seccomp=unconfined
+    - apparmor=unconfined
+  working_dir: /src
+  environment: &go-env
+    GOFLAGS: -buildvcs=false
+    GOCACHE: /root/.cache/go-build
+    GOMODCACHE: /go/pkg/mod
+  volumes:
+    - .:/src
+    - go-mod:/go/pkg/mod
+    - go-build:/root/.cache/go-build
+    # State and images live on a named volume rather than the container's own
+    # overlayfs, which cannot back overlay upper dirs. Sandbox storage images
+    # are sparse files on it.
+    - sandboxd-state:/var/lib/sandboxd
+
+services:
+  sandboxd:
+    <<: *sandboxd-common
+    # A real PID 1 reaps sandbox init processes orphaned when a crashed
+    # daemon is restarted; air does not.
+    init: true
+    command: ["air", "-c", ".air.toml"]
+    environment:
+      <<: *go-env
+      # Fast reaping keeps the e2e TTL case short.
+      SANDBOX_REAPER_INTERVAL: 2s
+      UI_ENABLED: "true"
+      # `mise run docker e2e` shortens this to exercise the detach window.
+      SANDBOX_TERMINAL_DETACH_TIMEOUT: ${SANDBOX_TERMINAL_DETACH_TIMEOUT:-10m}
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  sandboxd-test:
+    <<: *sandboxd-common
+    profiles: ["tools"]
+    command: ["go", "test", "./..."]
+
+volumes:
+  go-mod:
+  go-build:
+  sandboxd-state:

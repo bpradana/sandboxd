@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sandboxd console</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/xterm.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="vendor/xterm.js" defer></script>
+  <script src="vendor/addon-fit.js" defer></script>
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 9l3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>sandboxd</span>
+    </div>
+    <div class="topbar-right">
+      <span id="engine-status" class="status" data-state="unknown" title="Engine readiness (/readyz)"><i></i><span>checking…</span></span>
+      <button id="settings-open" class="btn ghost" type="button">API key</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <details id="create-panel" class="panel" open>
+        <summary>New sandbox</summary>
+        <form id="create-form" autocomplete="off">
+          <label>Image
+            <select name="image" id="image-select"><option value="">default</option></select>
+          </label>
+          <div class="grid2">
+            <label>CPU (millicores)<input name="cpu_millis" type="number" min="10" step="10" placeholder="default"></label>
+            <label>Memory (MB)<input name="memory_mb" type="number" min="16" placeholder="default"></label>
+            <label>Storage (MB)<input name="storage_mb" type="number" min="16" placeholder="default"></label>
+            <label>Max processes<input name="pids_max" type="number" min="8" placeholder="default"></label>
+            <label>TTL (s)<input name="ttl_seconds" type="number" min="1" placeholder="default"></label>
+            <label>Idle timeout (s)<input name="idle_timeout_seconds" type="number" min="1" placeholder="default"></label>
+          </div>
+          <fieldset class="segmented">
+            <legend>Network</legend>
+            <label><input type="radio" name="network" value="none" checked><span>none</span></label>
+            <label><input type="radio" name="network" value="egress"><span>egress</span></label>
+          </fieldset>
+          <label>Labels <small>key=value, comma separated</small>
+            <input name="labels" type="text" placeholder="owner=me">
+          </label>
+          <button class="btn primary" type="submit" id="create-submit">Create sandbox</button>
+        </form>
+      </details>
+
+      <section class="panel list-panel">
+        <div class="list-head">
+          <h2>Sandboxes</h2>
+          <span id="sandbox-count" class="muted"></span>
+        </div>
+        <ul id="sandbox-list" class="sandbox-list" aria-live="polite"></ul>
+        <p id="sandbox-empty" class="empty">No sandboxes yet.</p>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <nav id="tabs" class="tabs" role="tablist"></nav>
+      <div id="panes" class="panes">
+        <div id="workspace-empty" class="workspace-empty">
+          <p>Open a terminal from a sandbox to start working.</p>
+          <p class="muted">Each terminal is a login shell on a real PTY, so full-screen programs, Ctrl-C and resizing all work.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" id="settings-form">
+      <h2>API key</h2>
+      <p class="muted">Sent as a bearer token to <code>/api/v1</code>. Leave empty when the server has no keys configured. Stored in this browser only.</p>
+      <input id="api-key" type="password" autocomplete="off" placeholder="APP_API_KEYS value">
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+</body>
+</html>

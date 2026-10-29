@@ -1,0 +1,327 @@
+[tools]
+# Go itself is pinned for editor tooling only; every Go command runs in the
+# dev container (see [env]). Host tools are limited to repo hygiene.
+go = "1.26.10"
+pre-commit = "4.6.2"
+"pipx:detect-secrets" = "1.5.0"
+
+[env]
+# sandboxd is Linux-only and development happens on macOS, so every Go command
+# (test, lint, fmt, tidy, generate, docs) runs inside the privileged dev
+# container defined in docker-compose.yml. Nothing Go-related runs on the host.
+SANDBOXD_COMPOSE = "docker compose"
+SANDBOXD_RUN = "docker compose run --rm sandboxd-test"
+
+[tasks.default]
+description = "Show available tasks"
+hide = true
+run = "mise tasks"
+
+[tasks.help]
+description = "Show available tasks"
+run = "mise tasks"
+
+[tasks.tools]
+description = "Install all development tools via mise"
+run = '''
+echo "Installing host tools via mise and building the dev container..."
+mise install
+pre-commit install
+$SANDBOXD_COMPOSE build sandboxd-test
+'''
+
+[tasks.tidy]
+description = "Clean up go.mod and go.sum files"
+run = "$SANDBOXD_RUN go mod tidy"
+
+[tasks.docs]
+description = "Regenerate the checked-in OpenAPI specification"
+run = "$SANDBOXD_RUN swag init -g internal/transport/httpapi/openapi.go -o docs --parseInternal --outputTypes json,yaml"
+
+[tasks.run]
+description = "Run the API in the privileged container (alias for 'dev up' + logs)"
+raw = true
+run = '''
+$SANDBOXD_COMPOSE up -d --build sandboxd
+$SANDBOXD_COMPOSE logs -f sandboxd
+'''
+
+[tasks.build]
+description = "Build the Linux API or management CLI (in the container), or the runtime Docker image"
+usage = '''
+flag "--cli" help="Build the management CLI binary" {
+  conflicts "--docker"
+}
+flag "--docker" help="Build and export the local Docker image"
+'''
+run = '''
+ldflags="-s -w -X github.com/bpradana/sandboxd/internal/helper/buildinfo.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+{% if usage.docker %}
+echo "Building Docker image..."
+docker buildx build --target runtime -t sandboxd:local --load .
+{% elif usage.cli %}
+echo "Compiling management CLI..."
+mkdir -p ./target
+$SANDBOXD_RUN env CGO_ENABLED=0 go build -trimpath -ldflags="$ldflags" -o ./target/sandboxdctl ./cmd/cli
+{% else %}
+echo "Compiling API binary..."
+mkdir -p ./target
+$SANDBOXD_RUN env CGO_ENABLED=0 go build -trimpath -ldflags="$ldflags" -o ./target/sandboxd ./cmd/api
+{% endif %}
+'''
+
+[tasks.test]
+description = "Run all tests or a selected test variant"
+usage = '''
+flag "--race" help="Enable race detection"
+flag "--coverage" help="Write coverage.out and coverage.html; implies --race"
+flag "--pkg <pkg>" help="Run tests only for the specified package path"
+'''
+run = '''
+package="./..."
+if [ -n "${usage_pkg:-}" ]; then
+  package="./${usage_pkg}/..."
+fi
+
+race_flag=""
+if [ "${usage_race:-false}" = "true" ] || [ "${usage_coverage:-false}" = "true" ]; then
+  race_flag="-race"
+fi
+
+if [ "${usage_coverage:-false}" = "true" ]; then
+  echo "Running tests with coverage..."
+  $SANDBOXD_RUN go test -v $race_flag -coverprofile=coverage.out "$package"
+  $SANDBOXD_RUN go tool cover -html=coverage.out -o coverage.html
+else
+  echo "Running tests..."
+  $SANDBOXD_RUN go test -v $race_flag "$package"
+fi
+'''
+
+[tasks.fmt]
+description = "Format staged files, format all files, or check formatting"
+usage = '''
+flag "--all" help="Format all Go files" {
+  conflicts "--check"
+}
+flag "--check" help="Check formatting without modifying files"
+'''
+run = '''
+{% if usage.check %}
+echo "Checking Go formatting..."
+FILES="$(rg --files -g '*.go' -g '!vendor/**' -g '!target/**' -g '!tmp/**' -g '!.gocache/**')"
+test -z "$($SANDBOXD_RUN gofumpt -l $FILES)" || (echo "Run 'mise run fmt --all' to fix formatting"; exit 1)
+{% elif usage.all %}
+echo "Formatting Go files..."
+FILES="$(rg --files -g '*.go' -g '!vendor/**' -g '!target/**' -g '!tmp/**' -g '!.gocache/**')"
+if [ -n "$FILES" ]; then
+  $SANDBOXD_RUN gofumpt -w $FILES
+  $SANDBOXD_RUN goimports-reviser -set-alias -format $FILES
+fi
+{% else %}
+FILES="$(git diff --cached --name-only --diff-filter=ACMR -- '*.go')"
+if [ -n "$FILES" ]; then
+  echo "Formatting staged Go files:"
+  echo "$FILES"
+  git diff --cached --name-only --diff-filter=ACMR -z -- '*.go' | xargs -0 $SANDBOXD_RUN gofumpt -w
+  git diff --cached --name-only --diff-filter=ACMR -z -- '*.go' | xargs -0 $SANDBOXD_RUN goimports-reviser -set-alias -format
+else
+  echo "No staged Go files to format."
+fi
+{% endif %}
+'''
+
+[tasks.lint]
+description = "Run go vet or golangci-lint for linux and darwin"
+usage = '''
+flag "--ci" help="Run golangci-lint instead of go vet"
+'''
+run = '''
+# Lint both platforms: Linux runs the engine, darwin compiles the stubs used
+# for editor tooling on macOS.
+{% if usage.ci %}
+echo "Running golangci-lint (linux, darwin)..."
+$SANDBOXD_RUN sh -c 'golangci-lint run && GOOS=darwin golangci-lint run'
+{% else %}
+echo "Running go vet (linux, darwin)..."
+$SANDBOXD_RUN sh -c 'go vet ./... && GOOS=darwin go vet ./...'
+{% endif %}
+'''
+
+[tasks.security]
+description = "Run gosec or check known Go vulnerabilities"
+usage = '''
+flag "--vuln" help="Run govulncheck instead of gosec"
+'''
+run = '''
+{% if usage.vuln %}
+echo "Checking for vulnerabilities..."
+$SANDBOXD_RUN go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+{% else %}
+echo "Running security scan..."
+$SANDBOXD_RUN go run github.com/securego/gosec/v2/cmd/gosec@latest ./...
+{% endif %}
+'''
+
+[tasks.check]
+description = "Run the canonical, quality, or pre-commit verification suite"
+usage = '''
+flag "--quality" help="Run the broader quality suite" {
+  conflicts "--pre-commit"
+}
+flag "--pre-commit" help="Run pre-commit hooks on all files"
+'''
+run = '''
+{% if usage.pre_commit %}
+echo "Running pre-commit on all files (Go hooks call mise tasks, which use the container)..."
+pre-commit run --all-files
+{% elif usage.quality %}
+mise run fmt --all
+mise run lint --ci
+mise run test --coverage
+mise run security
+mise run security --vuln
+echo "Quality check completed."
+{% else %}
+mise run fmt --check
+mise run lint
+mise run test
+echo "Check completed."
+{% endif %}
+'''
+
+[tasks.generate]
+description = "Generate service, repository, or engine mocks"
+usage = '''
+arg "<kind>" help="Mock kind" {
+  choices "service" "repository" "engine" "all"
+}
+arg "[resource]" help="Resource package name"
+flag "--all" help="Generate every mock for the selected kind"
+'''
+run = '''
+kind="${usage_kind?}"
+resource="${usage_resource:-}"
+all="${usage_all:-false}"
+
+if [ "$kind" = "all" ]; then
+  mise run generate service --all
+  mise run generate repository --all
+  mise run generate engine
+  exit
+fi
+
+if [ "$kind" = "engine" ]; then
+  $SANDBOXD_RUN mockgen -source=internal/engine/engine.go -destination=internal/engine/mock_engine.go -package=engine
+  exit
+fi
+
+if [ "$all" = "true" ] && [ -n "$resource" ]; then
+  echo "Specify either a resource or --all, not both." >&2
+  exit 2
+fi
+if [ "$all" != "true" ] && [ -z "$resource" ]; then
+  echo "A resource is required unless --all is specified." >&2
+  exit 2
+fi
+
+if [ "$all" = "true" ]; then
+  for src in internal/$kind/*/$kind.go; do
+    resource="$(basename "$(dirname "$src")")"
+    dst="internal/$kind/$resource/mock_$kind.go"
+    echo "Generating $dst"
+    $SANDBOXD_RUN mockgen -source="$src" -destination="$dst" -package="$resource"
+  done
+  exit
+fi
+
+$SANDBOXD_RUN mockgen -source="internal/$kind/$resource/$kind.go" -destination="internal/$kind/$resource/mock_$kind.go" -package="$resource"
+'''
+
+[tasks.dev]
+description = "Start, stop, follow logs, or open a shell in the privileged sandboxd container"
+raw = true
+usage = '''
+arg "<action>" help="Development stack action" {
+  choices "up" "down" "logs" "shell"
+}
+'''
+run = '''
+case "${usage_action?}" in
+  up)
+    $SANDBOXD_COMPOSE up -d --build sandboxd
+    echo "API:         http://localhost:8080/api/v1"
+    echo "Web console: http://localhost:8080/ui/"
+    ;;
+  down) $SANDBOXD_COMPOSE down ;;
+  logs) $SANDBOXD_COMPOSE logs -f sandboxd ;;
+  shell) $SANDBOXD_COMPOSE exec sandboxd sh ;;
+esac
+'''
+
+[tasks.docker]
+description = "Run the e2e suite against the real kernel, or import the base image, inside Docker"
+raw = true
+usage = '''
+arg "<action>" help="Docker action" {
+  choices "e2e" "image"
+}
+'''
+run = '''
+case "${usage_action?}" in
+  e2e)
+    # Set SANDBOXD_E2E_API_KEY when APP_API_KEYS is configured in .env, and
+    # SANDBOXD_E2E_INTERNET=1 to include the public-egress check.
+    # A short terminal detach window keeps that case quick; the dev server
+    # is put back on its normal window afterwards.
+    detach=15s
+    SANDBOX_TERMINAL_DETACH_TIMEOUT=$detach $SANDBOXD_COMPOSE up -d --build --wait sandboxd
+    # The suite needs the base image; this is a no-op once it is imported.
+    $SANDBOXD_COMPOSE exec -T sandboxd sh ./scripts/fetch-image.sh alpine
+    status=0
+    $SANDBOXD_COMPOSE run --rm --build \
+      -e SANDBOXD_E2E_URL=http://sandboxd:8080 \
+      -e SANDBOXD_E2E_API_KEY="${SANDBOXD_E2E_API_KEY:-}" \
+      -e SANDBOXD_E2E_INTERNET="${SANDBOXD_E2E_INTERNET:-0}" \
+      -e SANDBOXD_E2E_DETACH_TIMEOUT=$detach \
+      sandboxd-test go test -v -count=1 -tags=e2e ./test/... || status=$?
+    $SANDBOXD_COMPOSE up -d sandboxd >/dev/null 2>&1 || true
+    exit $status
+    ;;
+  image)
+    $SANDBOXD_COMPOSE up -d --build --wait sandboxd
+    $SANDBOXD_COMPOSE exec -T sandboxd sh ./scripts/fetch-image.sh alpine
+    ;;
+esac
+'''
+
+[tasks.ui]
+description = "Refresh the vendored terminal emulator (xterm.js) embedded in the web console"
+raw = true
+usage = '''
+arg "<action>" help="Web console action" {
+  choices "vendor"
+}
+'''
+run = '''
+set -eu
+xterm_version=5.5.0
+fit_version=0.10.0
+dest=web/dist/vendor
+mkdir -p "$dest"
+base=https://cdn.jsdelivr.net/npm
+curl -fsSL "$base/@xterm/xterm@$xterm_version/lib/xterm.js" -o "$dest/xterm.js"
+curl -fsSL "$base/@xterm/xterm@$xterm_version/css/xterm.css" -o "$dest/xterm.css"
+curl -fsSL "$base/@xterm/xterm@$xterm_version/LICENSE" -o "$dest/LICENSE.xterm"
+curl -fsSL "$base/@xterm/addon-fit@$fit_version/lib/addon-fit.js" -o "$dest/addon-fit.js"
+printf '@xterm/xterm %s\n@xterm/addon-fit %s\n' "$xterm_version" "$fit_version" > "$dest/VERSIONS"
+echo "Vendored xterm.js $xterm_version and addon-fit $fit_version into $dest"
+'''
+
+[tasks.clean]
+description = "Remove build artifacts and temporary files"
+run = '''
+echo "Cleaning build artifacts..."
+rm -rf ./target tmp .gocache
+rm -f coverage.out coverage.html
+'''

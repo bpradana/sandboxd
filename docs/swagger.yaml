@@ -1,0 +1,1671 @@
+basePath: /
+definitions:
+  presentation.BuildInfoDoc:
+    properties:
+      build_time:
+        description: BuildTime is the UTC image build time.
+        example: "2026-10-29T12:00:00Z"
+        type: string
+      commit:
+        description: Commit is the seven-character Git commit hash.
+        example: 3fa41bc
+        type: string
+      modified:
+        description: Modified reports whether Go detected local source changes.
+        example: false
+        type: boolean
+      tag:
+        description: Tag is the release tag, or unknown when the build is not tagged.
+        example: unknown
+        type: string
+      version:
+        description: Version is formatted for the deployment environment.
+        example: staging.3fa41bc
+        type: string
+    type: object
+  presentation.CreateSandboxRequest:
+    properties:
+      cpu_millis:
+        description: CPUMillis is the CPU quota in millicores (1000 = one full core).
+        example: 1000
+        minimum: 10
+        type: integer
+      env:
+        additionalProperties:
+          type: string
+        description: Env is applied to every command run in the sandbox.
+        type: object
+      idle_timeout_seconds:
+        description: IdleTimeoutSeconds destroys the sandbox after this long without
+          exec or file activity; 0 uses the server default.
+        example: 600
+        minimum: 1
+        type: integer
+      image:
+        description: Image is the base root filesystem; defaults to SANDBOX_DEFAULT_IMAGE.
+        example: alpine
+        maxLength: 64
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        description: Labels are opaque caller metadata usable as list filters.
+        type: object
+      memory_mb:
+        description: MemoryMB is the hard memory limit; exceeding it OOM-kills the
+          sandbox's processes.
+        example: 512
+        minimum: 16
+        type: integer
+      network:
+        description: Network is none (loopback only) or egress (outbound internet,
+          private ranges blocked).
+        enum:
+        - none
+        - egress
+        example: none
+        type: string
+      pids_max:
+        description: PidsMax caps the number of processes and threads.
+        example: 256
+        minimum: 8
+        type: integer
+      storage_mb:
+        description: StorageMB caps the writable layer; writes beyond it fail with
+          ENOSPC.
+        example: 512
+        minimum: 16
+        type: integer
+      ttl_seconds:
+        description: TTLSeconds is the lifetime after which the sandbox is destroyed.
+        example: 1800
+        minimum: 1
+        type: integer
+    type: object
+  presentation.CreateSessionRequest:
+    properties:
+      cwd:
+        description: Cwd is the initial working directory.
+        example: /home/sandbox
+        maxLength: 4096
+        type: string
+      env:
+        additionalProperties:
+          type: string
+        description: Env is exported into the session shell at startup.
+        type: object
+      shell:
+        description: Shell is the interpreter kept alive for the session; bash falls
+          back to sh when absent.
+        enum:
+        - sh
+        - bash
+        example: bash
+        type: string
+      user:
+        description: |-
+          User runs the session's shell as root or the sandbox user; defaults to
+          SANDBOX_DEFAULT_USER.
+        enum:
+        - root
+        - sandbox
+        example: root
+        type: string
+    type: object
+  presentation.EmptyEnvelopeDoc:
+    type: object
+  presentation.ErrorResponseDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 404
+        type: integer
+      data:
+        additionalProperties: {}
+        description: Data is an empty object for error responses.
+        type: object
+      details:
+        description: Details carries additional structured error context when available.
+        type: object
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      error:
+        description: Error is the primary error detail when one is available.
+        example: sandbox not found
+        type: string
+      error_code:
+        description: ErrorCode is the machine-readable error code.
+        example: sandbox_not_found
+        type: string
+      errors:
+        description: Errors contains field-level validation errors.
+        items:
+          $ref: '#/definitions/presentation.ValidationErrorDoc'
+        type: array
+      message:
+        description: Message is the client-facing response message.
+        example: sandbox not found
+        type: string
+    type: object
+  presentation.ExecEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.ExecResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.ExecRequest:
+    properties:
+      argv:
+        description: Argv is executed directly without a shell; argv[0] is resolved
+          through PATH.
+        items:
+          type: string
+        maxItems: 4096
+        minItems: 1
+        type: array
+      command:
+        description: Command is run through /bin/sh -c. Exactly one of command or
+          argv is required.
+        example: python3 -c 'print(1+1)'
+        maxLength: 131072
+        type: string
+      cwd:
+        description: Cwd is the working directory; defaults to the user's home directory.
+        example: /root
+        maxLength: 4096
+        type: string
+      env:
+        additionalProperties:
+          type: string
+        description: Env is merged over the sandbox environment for this command only.
+        type: object
+      stdin:
+        description: Stdin is written to the command's standard input, which is then
+          closed.
+        maxLength: 10485760
+        type: string
+      timeout_seconds:
+        description: TimeoutSeconds kills the command's whole process group when exceeded.
+        example: 60
+        minimum: 1
+        type: integer
+      user:
+        description: |-
+          User runs the command as root (uid 0 of the sandbox, unprivileged on the
+          host) or the unprivileged sandbox user; defaults to SANDBOX_DEFAULT_USER.
+        enum:
+        - root
+        - sandbox
+        example: root
+        type: string
+    type: object
+  presentation.ExecResponse:
+    properties:
+      duration_ms:
+        example: 12
+        type: integer
+      exit_code:
+        description: ExitCode is the process exit status, or 128+signal when killed
+          by a signal.
+        example: 0
+        type: integer
+      signal:
+        description: Signal names the terminating signal, if any.
+        example: SIGKILL
+        type: string
+      stderr:
+        example: ""
+        type: string
+      stderr_truncated:
+        example: false
+        type: boolean
+      stdout:
+        example: |
+          2
+        type: string
+      stdout_truncated:
+        example: false
+        type: boolean
+      timed_out:
+        example: false
+        type: boolean
+    type: object
+  presentation.ExecStreamEvent:
+    properties:
+      data:
+        type: string
+      error:
+        type: string
+      result:
+        $ref: '#/definitions/presentation.ExecResponse'
+    type: object
+  presentation.FileInfoEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.FileInfoResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.FileInfoResponse:
+    properties:
+      link_target:
+        description: LinkTarget is set for symlinks; it is the raw target, resolved
+          inside the sandbox.
+        type: string
+      mode:
+        example: "0644"
+        type: string
+      modified_at:
+        type: string
+      name:
+        example: main.py
+        type: string
+      path:
+        example: /home/sandbox/main.py
+        type: string
+      size:
+        example: 128
+        type: integer
+      type:
+        example: file
+        type: string
+    type: object
+  presentation.FileListEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.FileInfoResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.ImageListEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.ImageResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.ImageResponse:
+    properties:
+      created_at:
+        type: string
+      name:
+        example: alpine
+        type: string
+    type: object
+  presentation.KeepaliveRequest:
+    properties:
+      ttl_seconds:
+        description: TTLSeconds is the new remaining lifetime from now; defaults to
+          SANDBOX_DEFAULT_TTL, capped at SANDBOX_MAX_TTL from creation.
+        example: 1800
+        minimum: 1
+        type: integer
+    type: object
+  presentation.LimitsResponse:
+    properties:
+      cpu_millis:
+        example: 1000
+        type: integer
+      memory_mb:
+        example: 512
+        type: integer
+      pids_max:
+        example: 256
+        type: integer
+      storage_mb:
+        example: 512
+        type: integer
+    type: object
+  presentation.MkdirRequest:
+    properties:
+      mode:
+        description: Mode is the octal permission for created directories.
+        example: "0755"
+        type: string
+      parents:
+        description: Parents creates missing parent directories, like mkdir -p.
+        example: true
+        type: boolean
+      path:
+        example: /home/sandbox/project
+        maxLength: 4096
+        type: string
+    required:
+    - path
+    type: object
+  presentation.ReadinessResponseDoc:
+    properties:
+      build:
+        allOf:
+        - $ref: '#/definitions/presentation.BuildInfoDoc'
+        description: Build identifies the exact service binary answering the probe.
+      checks:
+        additionalProperties:
+          type: string
+        description: Checks maps component names to their readiness status or error.
+        type: object
+      status:
+        description: Status is ok when the sandbox engine is ready, otherwise unhealthy.
+        example: ok
+        type: string
+    type: object
+  presentation.SandboxEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.SandboxResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SandboxListEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.SandboxResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SandboxResponse:
+    properties:
+      created_at:
+        type: string
+      env:
+        additionalProperties:
+          type: string
+        type: object
+      expires_at:
+        type: string
+      failure_reason:
+        type: string
+      id:
+        example: sbx_01jbq3w4k7m2x9z8a1b2c3d4e5
+        type: string
+      idle_timeout_seconds:
+        example: 600
+        type: integer
+      image:
+        example: alpine
+        type: string
+      ip_address:
+        example: 10.88.0.2
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      last_activity_at:
+        type: string
+      limits:
+        $ref: '#/definitions/presentation.LimitsResponse'
+      network:
+        example: none
+        type: string
+      state:
+        example: running
+        type: string
+      stats:
+        $ref: '#/definitions/presentation.SandboxStatsResponse'
+      stop_reason:
+        example: expired
+        type: string
+      stopped_at:
+        type: string
+    type: object
+  presentation.SandboxStatsEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.SandboxStatsResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SandboxStatsResponse:
+    properties:
+      cpu_usage_micros:
+        example: 152000
+        type: integer
+      memory_bytes:
+        description: MemoryBytes is current memory usage, including tmpfs-backed storage.
+        example: 10485760
+        type: integer
+      memory_limit_bytes:
+        example: 536870912
+        type: integer
+      memory_peak_bytes:
+        example: 20971520
+        type: integer
+      oom_kills:
+        description: OOMKills counts processes killed for exceeding the memory limit.
+        example: 0
+        type: integer
+      pids_current:
+        example: 3
+        type: integer
+      pids_limit:
+        example: 256
+        type: integer
+      storage_limit_bytes:
+        example: 536870912
+        type: integer
+      storage_used_bytes:
+        example: 4096
+        type: integer
+    type: object
+  presentation.SessionEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.SessionResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SessionExecRequest:
+    properties:
+      command:
+        description: Command is written to the session shell; shell state (cwd, variables)
+          persists afterwards.
+        example: cd /tmp && export X=1
+        maxLength: 131072
+        type: string
+      timeout_seconds:
+        description: TimeoutSeconds terminates the session when exceeded, because
+          the shell state is then undefined.
+        example: 60
+        minimum: 1
+        type: integer
+    required:
+    - command
+    type: object
+  presentation.SessionListEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.SessionResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SessionResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        example: ses_01jbq3w4k7m2x9z8a1b2c3d4e5
+        type: string
+      last_activity_at:
+        type: string
+      sandbox_id:
+        example: sbx_01jbq3w4k7m2x9z8a1b2c3d4e5
+        type: string
+      shell:
+        example: bash
+        type: string
+      state:
+        example: idle
+        type: string
+      user:
+        example: root
+        type: string
+    type: object
+  presentation.TerminalControlMessage:
+    properties:
+      cols:
+        type: integer
+      error:
+        type: string
+      exit_code:
+        type: integer
+      rows:
+        type: integer
+      signal:
+        type: string
+      terminal_id:
+        example: term-4f1c2a9b8e7d6c5b4a3f2e1d
+        type: string
+      type:
+        example: exit
+        type: string
+    type: object
+  presentation.TerminalTicketEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.TerminalTicketResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.TerminalTicketResponse:
+    properties:
+      expires_at:
+        example: "2026-10-29T10:00:30Z"
+        type: string
+      ticket:
+        description: Ticket is single-use and valid only for this sandbox's terminal
+          endpoint.
+        example: "0000000000000000000000000000000000000000000000000000000000000000"
+        type: string
+    type: object
+  presentation.ValidationErrorDoc:
+    properties:
+      field:
+        description: Field is the request field that failed validation.
+        example: memory_mb
+        type: string
+      param:
+        description: Param is the validation rule parameter, when the rule takes one.
+        example: "16"
+        type: string
+      tag:
+        description: Tag is the validation rule that failed.
+        example: gte
+        type: string
+      value:
+        description: Value is the rejected field value, when available.
+        example: "4"
+        type: string
+    type: object
+info:
+  contact: {}
+  description: |-
+    REST API for creating, driving, and destroying isolated sandboxes for AI agents.
+    Sandboxes are built directly on Linux namespaces, cgroups v2, overlayfs, seccomp, and capabilities. They share the host kernel, so they are weaker than hardware-backed microVMs.
+    The source of truth remains the codebase; this spec is generated from handler annotations.
+  title: sandboxd API
+  version: "1.0"
+paths:
+  /api/v1/images:
+    get:
+      description: Lists the base root filesystems sandboxes can be created from.
+        Images are imported by the operator with `sandboxdctl image import`.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Available images.
+          schema:
+            $ref: '#/definitions/presentation.ImageListEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Sandbox engine unavailable.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List base images
+      tags:
+      - images
+  /api/v1/sandboxes:
+    get:
+      description: Lists sandboxes held by this server, including recently stopped
+        or failed ones that are still within the tombstone retention window.
+      parameters:
+      - description: Lifecycle state filter.
+        enum:
+        - creating
+        - running
+        - stopping
+        - stopped
+        - failed
+        in: query
+        name: state
+        type: string
+      - description: Label filter as key=value.
+        in: query
+        name: label
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sandboxes ordered by creation time.
+          schema:
+            $ref: '#/definitions/presentation.SandboxListEnvelopeDoc'
+        "400":
+          description: Invalid filter.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List sandboxes
+      tags:
+      - sandboxes
+    post:
+      consumes:
+      - application/json
+      description: Creates an isolated environment (user, mount, pid, net, uts, ipc
+        and cgroup namespaces; cgroup v2 limits; overlay root on a size-capped tmpfs;
+        seccomp) and waits until it is running. Omitted limits use the server defaults;
+        values above the server maximums are rejected.
+      parameters:
+      - description: Sandbox specification.
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/presentation.CreateSandboxRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Running sandbox.
+          schema:
+            $ref: '#/definitions/presentation.SandboxEnvelopeDoc'
+        "400":
+          description: Validation failed, or a limit exceeds the server maximum (limit_exceeded).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Image not found (image_not_found).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "429":
+          description: Maximum number of sandboxes reached (sandbox_limit_reached).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "500":
+          description: Sandbox could not be started.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Sandbox engine unavailable.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Create a sandbox
+      tags:
+      - sandboxes
+  /api/v1/sandboxes/{id}:
+    delete:
+      description: Kills every process in the sandbox and releases its cgroup, mounts,
+        storage, and network. Idempotent for sandboxes that are already stopped.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sandbox destroyed.
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "500":
+          description: Teardown failed; the sandbox is marked failed.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Destroy a sandbox
+      tags:
+      - sandboxes
+    get:
+      description: Returns the sandbox state, limits, and timestamps. Running sandboxes
+        also include live resource statistics.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sandbox.
+          schema:
+            $ref: '#/definitions/presentation.SandboxEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found (sandbox_not_found).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Get a sandbox
+      tags:
+      - sandboxes
+  /api/v1/sandboxes/{id}/exec:
+    post:
+      consumes:
+      - application/json
+      description: Runs one command in the sandbox as the unprivileged sandbox user
+        and waits for it to finish. `command` runs through /bin/sh -c; `argv` runs
+        directly. On timeout the command's whole process group is killed and timed_out
+        is true. stdout and stderr are each capped at SANDBOX_EXEC_MAX_OUTPUT_BYTES;
+        excess output is dropped and flagged as truncated.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Command to run.
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.ExecRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Command finished (any exit code).
+          schema:
+            $ref: '#/definitions/presentation.ExecEnvelopeDoc'
+        "400":
+          description: Validation failed, or timeout above the server maximum.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "429":
+          description: Too many concurrent commands in this sandbox (exec_limit_reached).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Run a command
+      tags:
+      - exec
+  /api/v1/sandboxes/{id}/exec/stream:
+    post:
+      consumes:
+      - application/json
+      description: 'Same request as POST /exec, but responds with Server-Sent Events
+        as output arrives: `stdout` and `stderr` events carry {"data": "..."}; the
+        final `exit` event carries {"result": {...}} (stdout/stderr omitted), or an
+        `error` event carries {"error": "..."}. Validation and lookup failures before
+        the command starts are returned as regular JSON errors. Disconnecting kills
+        the command.'
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Command to run.
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.ExecRequest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: Event stream; each data line is one ExecStreamEvent.
+          schema:
+            $ref: '#/definitions/presentation.ExecStreamEvent'
+        "400":
+          description: Validation failed.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Run a command and stream its output
+      tags:
+      - exec
+  /api/v1/sandboxes/{id}/files:
+    delete:
+      description: Removes a file, symlink, or empty directory; recursive=true removes
+        non-empty directories. The sandbox root cannot be removed.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute path inside the sandbox.
+        in: query
+        name: path
+        required: true
+        type: string
+      - description: Remove directories recursively.
+        in: query
+        name: recursive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Path removed.
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "400":
+          description: Invalid path.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or path not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox not running, or the directory is not empty.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Delete a path
+      tags:
+      - files
+    get:
+      description: Streams a regular file from the sandbox. The path is resolved inside
+        the sandbox root, so symlinks and `..` can never reach the host filesystem.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute file path inside the sandbox.
+        in: query
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: File content.
+          schema:
+            type: file
+        "400":
+          description: Invalid path.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or path not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox not running, or the path is a directory.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Download a file
+      tags:
+      - files
+    put:
+      consumes:
+      - application/octet-stream
+      description: Writes the raw request body to a file inside the sandbox, creating
+        or truncating it. Parent directories must exist. New files are owned by the
+        sandbox user. The body is streamed and capped at SANDBOX_FILE_MAX_BYTES, and
+        also counts against the sandbox's storage_mb.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute file path inside the sandbox.
+        in: query
+        name: path
+        required: true
+        type: string
+      - default: "0644"
+        description: Octal permission for a new file.
+        in: query
+        name: mode
+        type: string
+      - description: File content.
+        in: body
+        name: body
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Written file.
+          schema:
+            $ref: '#/definitions/presentation.FileInfoEnvelopeDoc'
+        "400":
+          description: Invalid path or mode.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or parent directory not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox not running, or the path is a directory.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "413":
+          description: File exceeds SANDBOX_FILE_MAX_BYTES (file_too_large).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "507":
+          description: Sandbox storage is full (storage_full).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Upload a file
+      tags:
+      - files
+  /api/v1/sandboxes/{id}/files/list:
+    get:
+      description: Lists the entries of a directory inside the sandbox, sorted by
+        name. Symlinks are reported, not followed.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute directory path inside the sandbox.
+        in: query
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Directory entries.
+          schema:
+            $ref: '#/definitions/presentation.FileListEnvelopeDoc'
+        "400":
+          description: Invalid path.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or path not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox not running, or the path is not a directory.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List a directory
+      tags:
+      - files
+  /api/v1/sandboxes/{id}/files/mkdir:
+    post:
+      consumes:
+      - application/json
+      description: Creates a directory owned by the sandbox user; with parents=true
+        missing parents are created too and an existing directory is not an error.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Directory to create.
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.MkdirRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created directory.
+          schema:
+            $ref: '#/definitions/presentation.FileInfoEnvelopeDoc'
+        "400":
+          description: Invalid path or mode.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or parent not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox not running, or the path already exists.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Create a directory
+      tags:
+      - files
+  /api/v1/sandboxes/{id}/files/stat:
+    get:
+      description: Returns metadata for a path inside the sandbox without following
+        a final symlink.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Absolute path inside the sandbox.
+        in: query
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Path metadata.
+          schema:
+            $ref: '#/definitions/presentation.FileInfoEnvelopeDoc'
+        "400":
+          description: Invalid path.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or path not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox not running.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Stat a path
+      tags:
+      - files
+  /api/v1/sandboxes/{id}/keepalive:
+    post:
+      consumes:
+      - application/json
+      description: Resets the expiry to now + ttl_seconds (default SANDBOX_DEFAULT_TTL),
+        never beyond SANDBOX_MAX_TTL after creation, and counts as activity for the
+        idle timeout.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New lifetime.
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/presentation.KeepaliveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated sandbox.
+          schema:
+            $ref: '#/definitions/presentation.SandboxEnvelopeDoc'
+        "400":
+          description: Validation failed.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Extend a sandbox's lifetime
+      tags:
+      - sandboxes
+  /api/v1/sandboxes/{id}/sessions:
+    get:
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sessions ordered by creation time.
+          schema:
+            $ref: '#/definitions/presentation.SessionListEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List shell sessions
+      tags:
+      - sessions
+    post:
+      consumes:
+      - application/json
+      description: Starts a long-lived shell inside the sandbox. Commands sent to
+        the session share shell state -- working directory, exported variables, activated
+        virtualenvs -- across calls.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Session options.
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/presentation.CreateSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Session opened.
+          schema:
+            $ref: '#/definitions/presentation.SessionEnvelopeDoc'
+        "400":
+          description: Validation failed, or the session limit is reached.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Open a shell session
+      tags:
+      - sessions
+  /api/v1/sandboxes/{id}/sessions/{session_id}:
+    delete:
+      description: Kills the session shell and everything it started.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Session ID.
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Session closed.
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or session not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Close a shell session
+      tags:
+      - sessions
+  /api/v1/sandboxes/{id}/sessions/{session_id}/exec:
+    post:
+      consumes:
+      - application/json
+      description: Writes the command to the session shell and waits for it to finish.
+        A session runs one command at a time. If the command times out the session
+        is terminated, because its shell state is no longer known.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Session ID.
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Command to run.
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.SessionExecRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Command finished.
+          schema:
+            $ref: '#/definitions/presentation.ExecEnvelopeDoc'
+        "400":
+          description: Validation failed.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox or session not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox not running, session busy (session_busy), or session
+            closed (session_closed).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Run a command in a shell session
+      tags:
+      - sessions
+  /api/v1/sandboxes/{id}/stats:
+    get:
+      description: Returns cgroup memory, CPU, process, and OOM counters plus writable-layer
+        usage.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Resource statistics.
+          schema:
+            $ref: '#/definitions/presentation.SandboxStatsEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running (sandbox_not_running).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Get sandbox resource statistics
+      tags:
+      - sandboxes
+  /api/v1/sandboxes/{id}/terminal:
+    get:
+      description: 'Upgrades to a WebSocket attached to a login shell on a pseudo-terminal
+        inside the sandbox: a new one, or with terminal_id a running one (recent output
+        is replayed). Binary messages carry raw terminal input (client to server)
+        and output (server to client). Text messages carry JSON control messages:
+        the server first sends {"type":"attached","terminal_id":"..."}; the client
+        sends {"type":"resize","cols":N,"rows":N} and {"type":"close"} to end the
+        terminal; the server sends {"type":"exit","exit_code":N} or {"type":"error","error":"..."}
+        before closing. Closing the socket without "close" detaches: the shell keeps
+        running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer
+        attachment takes over from an older one. Authenticate with a bearer key or
+        with a ticket from POST /terminal/tickets; browser Origins must be this server
+        or an allowed CORS origin. While attached, the terminal keeps the sandbox
+        from going idle.'
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Single-use terminal ticket.
+        in: query
+        name: ticket
+        type: string
+      - description: Reattach to this running terminal.
+        in: query
+        name: terminal_id
+        type: string
+      - description: Initial columns.
+        in: query
+        maximum: 1000
+        minimum: 1
+        name: cols
+        type: integer
+      - description: Initial rows.
+        in: query
+        maximum: 1000
+        minimum: 1
+        name: rows
+        type: integer
+      - description: Login shell; bash falls back to sh when absent.
+        enum:
+        - sh
+        - bash
+        in: query
+        name: shell
+        type: string
+      - description: Initial working directory.
+        in: query
+        name: cwd
+        type: string
+      responses:
+        "101":
+          description: Switching to the WebSocket protocol.
+          schema:
+            $ref: '#/definitions/presentation.TerminalControlMessage'
+        "400":
+          description: Validation failed.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key or ticket.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "403":
+          description: Origin not allowed.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "426":
+          description: Not a WebSocket upgrade request.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Open an interactive terminal
+      tags:
+      - terminal
+  /api/v1/sandboxes/{id}/terminal/tickets:
+    post:
+      description: Returns a single-use ticket, valid for 30 seconds, that authenticates
+        one WebSocket upgrade on GET /api/v1/sandboxes/{id}/terminal. Browsers need
+        it because they cannot send an Authorization header on a WebSocket.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Ticket issued.
+          schema:
+            $ref: '#/definitions/presentation.TerminalTicketEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Issue a terminal ticket
+      tags:
+      - terminal
+  /healthz:
+    get:
+      description: Returns 204 when the process is alive.
+      responses:
+        "204":
+          description: No Content
+      summary: Liveness probe
+      tags:
+      - health
+  /readyz:
+    get:
+      description: |-
+        Reports whether the sandbox engine passed its preflight checks (Linux, cgroup v2 delegation, overlayfs, openat2) and can create sandboxes.
+        The response includes build info. In environments whose APP_ENV contains "prod" or "staging", checks is returned as an empty object so internal errors are not exposed; the status code (200 or 503) still reflects engine health.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.ReadinessResponseDoc'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/presentation.ReadinessResponseDoc'
+      summary: Readiness probe
+      tags:
+      - health
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: API key as "Bearer <key>".
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
+tags:
+- description: Liveness and readiness probes.
+  name: health
+- description: Base root filesystems available to sandboxes.
+  name: images
+- description: Sandbox creation, inspection, lifetime extension, and destruction.
+  name: sandboxes
+- description: One-shot command execution, buffered or streamed over Server-Sent Events.
+  name: exec
+- description: Persistent shell sessions whose state carries across commands.
+  name: sessions
+- description: File upload, download, listing, and management inside a sandbox.
+  name: files

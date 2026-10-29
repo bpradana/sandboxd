@@ -1,0 +1,52 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Vendored third-party assets are kept byte-identical to upstream.
+      - id: trailing-whitespace
+        exclude: ^web/dist/vendor/
+      - id: end-of-file-fixer
+        exclude: ^web/dist/vendor/
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+      - id: detect-private-key
+
+  # Go hooks delegate to mise tasks, which run inside the dev container.
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: gofumpt check
+        entry: mise run fmt --check
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-vet
+        name: go vet
+        entry: mise run lint
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-test
+        name: go test
+        entry: mise run test
+        language: system
+        types: [go]
+        pass_filenames: false
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: ^web/dist/vendor/
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks

@@ -1,0 +1,12 @@
+.git
+.gocache
+.idea
+.DS_Store
+.env
+target
+tmp
+coverage.out
+coverage.html
+*.tar
+*.tar.gz
+*.tar.xz

@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in sandboxd does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not file security vulnerabilities here**; see [SECURITY.md](../blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: API calls (curl), console steps, or a script. Smaller is better.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: sandboxd output around the failure. Remove API keys first.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: sandboxd version
+      description: "`GET /readyz` reports it, or the release tag / commit you built."
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Kernel (`uname -r`), distribution, how sandboxd runs (systemd, container, dev compose), storage driver and filesystem.
+    validations:
+      required: true

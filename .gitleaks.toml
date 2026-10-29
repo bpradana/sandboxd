@@ -1,0 +1,6 @@
+# Gitleaks configuration file
+
+[allowlist]
+paths = [
+    ".secrets.baseline"
+]

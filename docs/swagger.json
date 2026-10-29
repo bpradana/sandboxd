@@ -1,0 +1,2373 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "REST API for creating, driving, and destroying isolated sandboxes for AI agents.\nSandboxes are built directly on Linux namespaces, cgroups v2, overlayfs, seccomp, and capabilities. They share the host kernel, so they are weaker than hardware-backed microVMs.\nThe source of truth remains the codebase; this spec is generated from handler annotations.",
+        "title": "sandboxd API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/",
+    "paths": {
+        "/api/v1/images": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the base root filesystems sandboxes can be created from. Images are imported by the operator with `sandboxdctl image import`.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "List base images",
+                "responses": {
+                    "200": {
+                        "description": "Available images.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ImageListEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Sandbox engine unavailable.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists sandboxes held by this server, including recently stopped or failed ones that are still within the tombstone retention window.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "List sandboxes",
+                "parameters": [
+                    {
+                        "enum": [
+                            "creating",
+                            "running",
+                            "stopping",
+                            "stopped",
+                            "failed"
+                        ],
+                        "type": "string",
+                        "description": "Lifecycle state filter.",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Label filter as key=value.",
+                        "name": "label",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Sandboxes ordered by creation time.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SandboxListEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid filter.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an isolated environment (user, mount, pid, net, uts, ipc and cgroup namespaces; cgroup v2 limits; overlay root on a size-capped tmpfs; seccomp) and waits until it is running. Omitted limits use the server defaults; values above the server maximums are rejected.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Create a sandbox",
+                "parameters": [
+                    {
+                        "description": "Sandbox specification.",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CreateSandboxRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Running sandbox.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SandboxEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed, or a limit exceeds the server maximum (limit_exceeded).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Image not found (image_not_found).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "429": {
+                        "description": "Maximum number of sandboxes reached (sandbox_limit_reached).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "500": {
+                        "description": "Sandbox could not be started.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Sandbox engine unavailable.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the sandbox state, limits, and timestamps. Running sandboxes also include live resource statistics.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Get a sandbox",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Sandbox.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SandboxEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found (sandbox_not_found).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Kills every process in the sandbox and releases its cgroup, mounts, storage, and network. Idempotent for sandboxes that are already stopped.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Destroy a sandbox",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Sandbox destroyed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.EmptyEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "500": {
+                        "description": "Teardown failed; the sandbox is marked failed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/exec": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Runs one command in the sandbox as the unprivileged sandbox user and waits for it to finish. `command` runs through /bin/sh -c; `argv` runs directly. On timeout the command's whole process group is killed and timed_out is true. stdout and stderr are each capped at SANDBOX_EXEC_MAX_OUTPUT_BYTES; excess output is dropped and flagged as truncated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "exec"
+                ],
+                "summary": "Run a command",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Command to run.",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ExecRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Command finished (any exit code).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ExecEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed, or timeout above the server maximum.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "429": {
+                        "description": "Too many concurrent commands in this sandbox (exec_limit_reached).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/exec/stream": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Same request as POST /exec, but responds with Server-Sent Events as output arrives: `stdout` and `stderr` events carry {\"data\": \"...\"}; the final `exit` event carries {\"result\": {...}} (stdout/stderr omitted), or an `error` event carries {\"error\": \"...\"}. Validation and lookup failures before the command starts are returned as regular JSON errors. Disconnecting kills the command.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "exec"
+                ],
+                "summary": "Run a command and stream its output",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Command to run.",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ExecRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Event stream; each data line is one ExecStreamEvent.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ExecStreamEvent"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/files": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Streams a regular file from the sandbox. The path is resolved inside the sandbox root, so symlinks and `..` can never reach the host filesystem.",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Download a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Absolute file path inside the sandbox.",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File content.",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid path.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or path not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox not running, or the path is a directory.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Writes the raw request body to a file inside the sandbox, creating or truncating it. Parent directories must exist. New files are owned by the sandbox user. The body is streamed and capped at SANDBOX_FILE_MAX_BYTES, and also counts against the sandbox's storage_mb.",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Upload a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Absolute file path inside the sandbox.",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "0644",
+                        "description": "Octal permission for a new file.",
+                        "name": "mode",
+                        "in": "query"
+                    },
+                    {
+                        "description": "File content.",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Written file.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.FileInfoEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid path or mode.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or parent directory not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox not running, or the path is a directory.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "413": {
+                        "description": "File exceeds SANDBOX_FILE_MAX_BYTES (file_too_large).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "507": {
+                        "description": "Sandbox storage is full (storage_full).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a file, symlink, or empty directory; recursive=true removes non-empty directories. The sandbox root cannot be removed.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Delete a path",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Absolute path inside the sandbox.",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove directories recursively.",
+                        "name": "recursive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Path removed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.EmptyEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid path.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or path not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox not running, or the directory is not empty.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/files/list": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the entries of a directory inside the sandbox, sorted by name. Symlinks are reported, not followed.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List a directory",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Absolute directory path inside the sandbox.",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Directory entries.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.FileListEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid path.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or path not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox not running, or the path is not a directory.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/files/mkdir": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a directory owned by the sandbox user; with parents=true missing parents are created too and an existing directory is not an error.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Create a directory",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Directory to create.",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.MkdirRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created directory.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.FileInfoEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid path or mode.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or parent not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox not running, or the path already exists.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/files/stat": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns metadata for a path inside the sandbox without following a final symlink.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Stat a path",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Absolute path inside the sandbox.",
+                        "name": "path",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Path metadata.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.FileInfoEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid path.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or path not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox not running.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/keepalive": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Resets the expiry to now + ttl_seconds (default SANDBOX_DEFAULT_TTL), never beyond SANDBOX_MAX_TTL after creation, and counts as activity for the idle timeout.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Extend a sandbox's lifetime",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New lifetime.",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.KeepaliveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated sandbox.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SandboxEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/sessions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "List shell sessions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Sessions ordered by creation time.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SessionListEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Starts a long-lived shell inside the sandbox. Commands sent to the session share shell state -- working directory, exported variables, activated virtualenvs -- across calls.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Open a shell session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Session options.",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CreateSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Session opened.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SessionEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed, or the session limit is reached.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/sessions/{session_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Kills the session shell and everything it started.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Close a shell session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID.",
+                        "name": "session_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Session closed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.EmptyEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or session not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/sessions/{session_id}/exec": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Writes the command to the session shell and waits for it to finish. A session runs one command at a time. If the command times out the session is terminated, because its shell state is no longer known.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Run a command in a shell session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID.",
+                        "name": "session_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Command to run.",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SessionExecRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Command finished.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ExecEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox or session not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox not running, session busy (session_busy), or session closed (session_closed).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns cgroup memory, CPU, process, and OOM counters plus writable-layer usage.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Get sandbox resource statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resource statistics.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SandboxStatsEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running (sandbox_not_running).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/terminal": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upgrades to a WebSocket attached to a login shell on a pseudo-terminal inside the sandbox: a new one, or with terminal_id a running one (recent output is replayed). Binary messages carry raw terminal input (client to server) and output (server to client). Text messages carry JSON control messages: the server first sends {\"type\":\"attached\",\"terminal_id\":\"...\"}; the client sends {\"type\":\"resize\",\"cols\":N,\"rows\":N} and {\"type\":\"close\"} to end the terminal; the server sends {\"type\":\"exit\",\"exit_code\":N} or {\"type\":\"error\",\"error\":\"...\"} before closing. Closing the socket without \"close\" detaches: the shell keeps running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer attachment takes over from an older one. Authenticate with a bearer key or with a ticket from POST /terminal/tickets; browser Origins must be this server or an allowed CORS origin. While attached, the terminal keeps the sandbox from going idle.",
+                "tags": [
+                    "terminal"
+                ],
+                "summary": "Open an interactive terminal",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Single-use terminal ticket.",
+                        "name": "ticket",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reattach to this running terminal.",
+                        "name": "terminal_id",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Initial columns.",
+                        "name": "cols",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Initial rows.",
+                        "name": "rows",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "sh",
+                            "bash"
+                        ],
+                        "type": "string",
+                        "description": "Login shell; bash falls back to sh when absent.",
+                        "name": "shell",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Initial working directory.",
+                        "name": "cwd",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching to the WebSocket protocol.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.TerminalControlMessage"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key or ticket.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "403": {
+                        "description": "Origin not allowed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "426": {
+                        "description": "Not a WebSocket upgrade request.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/terminal/tickets": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a single-use ticket, valid for 30 seconds, that authenticates one WebSocket upgrade on GET /api/v1/sandboxes/{id}/terminal. Browsers need it because they cannot send an Authorization header on a WebSocket.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "terminal"
+                ],
+                "summary": "Issue a terminal ticket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Ticket issued.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.TerminalTicketEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/healthz": {
+            "get": {
+                "description": "Returns 204 when the process is alive.",
+                "tags": [
+                    "health"
+                ],
+                "summary": "Liveness probe",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Reports whether the sandbox engine passed its preflight checks (Linux, cgroup v2 delegation, overlayfs, openat2) and can create sandboxes.\nThe response includes build info. In environments whose APP_ENV contains \"prod\" or \"staging\", checks is returned as an empty object so internal errors are not exposed; the status code (200 or 503) still reflects engine health.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Readiness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ReadinessResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ReadinessResponseDoc"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "presentation.BuildInfoDoc": {
+            "type": "object",
+            "properties": {
+                "build_time": {
+                    "description": "BuildTime is the UTC image build time.",
+                    "type": "string",
+                    "example": "2026-10-29T12:00:00Z"
+                },
+                "commit": {
+                    "description": "Commit is the seven-character Git commit hash.",
+                    "type": "string",
+                    "example": "3fa41bc"
+                },
+                "modified": {
+                    "description": "Modified reports whether Go detected local source changes.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "tag": {
+                    "description": "Tag is the release tag, or unknown when the build is not tagged.",
+                    "type": "string",
+                    "example": "unknown"
+                },
+                "version": {
+                    "description": "Version is formatted for the deployment environment.",
+                    "type": "string",
+                    "example": "staging.3fa41bc"
+                }
+            }
+        },
+        "presentation.CreateSandboxRequest": {
+            "type": "object",
+            "properties": {
+                "cpu_millis": {
+                    "description": "CPUMillis is the CPU quota in millicores (1000 = one full core).",
+                    "type": "integer",
+                    "minimum": 10,
+                    "example": 1000
+                },
+                "env": {
+                    "description": "Env is applied to every command run in the sandbox.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "idle_timeout_seconds": {
+                    "description": "IdleTimeoutSeconds destroys the sandbox after this long without exec or file activity; 0 uses the server default.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 600
+                },
+                "image": {
+                    "description": "Image is the base root filesystem; defaults to SANDBOX_DEFAULT_IMAGE.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "alpine"
+                },
+                "labels": {
+                    "description": "Labels are opaque caller metadata usable as list filters.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "memory_mb": {
+                    "description": "MemoryMB is the hard memory limit; exceeding it OOM-kills the sandbox's processes.",
+                    "type": "integer",
+                    "minimum": 16,
+                    "example": 512
+                },
+                "network": {
+                    "description": "Network is none (loopback only) or egress (outbound internet, private ranges blocked).",
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "egress"
+                    ],
+                    "example": "none"
+                },
+                "pids_max": {
+                    "description": "PidsMax caps the number of processes and threads.",
+                    "type": "integer",
+                    "minimum": 8,
+                    "example": 256
+                },
+                "storage_mb": {
+                    "description": "StorageMB caps the writable layer; writes beyond it fail with ENOSPC.",
+                    "type": "integer",
+                    "minimum": 16,
+                    "example": 512
+                },
+                "ttl_seconds": {
+                    "description": "TTLSeconds is the lifetime after which the sandbox is destroyed.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 1800
+                }
+            }
+        },
+        "presentation.CreateSessionRequest": {
+            "type": "object",
+            "properties": {
+                "cwd": {
+                    "description": "Cwd is the initial working directory.",
+                    "type": "string",
+                    "maxLength": 4096,
+                    "example": "/home/sandbox"
+                },
+                "env": {
+                    "description": "Env is exported into the session shell at startup.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "shell": {
+                    "description": "Shell is the interpreter kept alive for the session; bash falls back to sh when absent.",
+                    "type": "string",
+                    "enum": [
+                        "sh",
+                        "bash"
+                    ],
+                    "example": "bash"
+                },
+                "user": {
+                    "description": "User runs the session's shell as root or the sandbox user; defaults to\nSANDBOX_DEFAULT_USER.",
+                    "type": "string",
+                    "enum": [
+                        "root",
+                        "sandbox"
+                    ],
+                    "example": "root"
+                }
+            }
+        },
+        "presentation.EmptyEnvelopeDoc": {
+            "type": "object"
+        },
+        "presentation.ErrorResponseDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 404
+                },
+                "data": {
+                    "description": "Data is an empty object for error responses.",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "details": {
+                    "description": "Details carries additional structured error context when available.",
+                    "type": "object"
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "error": {
+                    "description": "Error is the primary error detail when one is available.",
+                    "type": "string",
+                    "example": "sandbox not found"
+                },
+                "error_code": {
+                    "description": "ErrorCode is the machine-readable error code.",
+                    "type": "string",
+                    "example": "sandbox_not_found"
+                },
+                "errors": {
+                    "description": "Errors contains field-level validation errors.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.ValidationErrorDoc"
+                    }
+                },
+                "message": {
+                    "description": "Message is the client-facing response message.",
+                    "type": "string",
+                    "example": "sandbox not found"
+                }
+            }
+        },
+        "presentation.ExecEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.ExecResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.ExecRequest": {
+            "type": "object",
+            "properties": {
+                "argv": {
+                    "description": "Argv is executed directly without a shell; argv[0] is resolved through PATH.",
+                    "type": "array",
+                    "maxItems": 4096,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "command": {
+                    "description": "Command is run through /bin/sh -c. Exactly one of command or argv is required.",
+                    "type": "string",
+                    "maxLength": 131072,
+                    "example": "python3 -c 'print(1+1)'"
+                },
+                "cwd": {
+                    "description": "Cwd is the working directory; defaults to the user's home directory.",
+                    "type": "string",
+                    "maxLength": 4096,
+                    "example": "/root"
+                },
+                "env": {
+                    "description": "Env is merged over the sandbox environment for this command only.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "stdin": {
+                    "description": "Stdin is written to the command's standard input, which is then closed.",
+                    "type": "string",
+                    "maxLength": 10485760
+                },
+                "timeout_seconds": {
+                    "description": "TimeoutSeconds kills the command's whole process group when exceeded.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 60
+                },
+                "user": {
+                    "description": "User runs the command as root (uid 0 of the sandbox, unprivileged on the\nhost) or the unprivileged sandbox user; defaults to SANDBOX_DEFAULT_USER.",
+                    "type": "string",
+                    "enum": [
+                        "root",
+                        "sandbox"
+                    ],
+                    "example": "root"
+                }
+            }
+        },
+        "presentation.ExecResponse": {
+            "type": "object",
+            "properties": {
+                "duration_ms": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "exit_code": {
+                    "description": "ExitCode is the process exit status, or 128+signal when killed by a signal.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "signal": {
+                    "description": "Signal names the terminating signal, if any.",
+                    "type": "string",
+                    "example": "SIGKILL"
+                },
+                "stderr": {
+                    "type": "string",
+                    "example": ""
+                },
+                "stderr_truncated": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "stdout": {
+                    "type": "string",
+                    "example": "2\n"
+                },
+                "stdout_truncated": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "timed_out": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "presentation.ExecStreamEvent": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "result": {
+                    "$ref": "#/definitions/presentation.ExecResponse"
+                }
+            }
+        },
+        "presentation.FileInfoEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.FileInfoResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.FileInfoResponse": {
+            "type": "object",
+            "properties": {
+                "link_target": {
+                    "description": "LinkTarget is set for symlinks; it is the raw target, resolved inside the sandbox.",
+                    "type": "string"
+                },
+                "mode": {
+                    "type": "string",
+                    "example": "0644"
+                },
+                "modified_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "main.py"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/home/sandbox/main.py"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 128
+                },
+                "type": {
+                    "type": "string",
+                    "example": "file"
+                }
+            }
+        },
+        "presentation.FileListEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.FileInfoResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.ImageListEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.ImageResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.ImageResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "alpine"
+                }
+            }
+        },
+        "presentation.KeepaliveRequest": {
+            "type": "object",
+            "properties": {
+                "ttl_seconds": {
+                    "description": "TTLSeconds is the new remaining lifetime from now; defaults to SANDBOX_DEFAULT_TTL, capped at SANDBOX_MAX_TTL from creation.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 1800
+                }
+            }
+        },
+        "presentation.LimitsResponse": {
+            "type": "object",
+            "properties": {
+                "cpu_millis": {
+                    "type": "integer",
+                    "example": 1000
+                },
+                "memory_mb": {
+                    "type": "integer",
+                    "example": 512
+                },
+                "pids_max": {
+                    "type": "integer",
+                    "example": 256
+                },
+                "storage_mb": {
+                    "type": "integer",
+                    "example": 512
+                }
+            }
+        },
+        "presentation.MkdirRequest": {
+            "type": "object",
+            "required": [
+                "path"
+            ],
+            "properties": {
+                "mode": {
+                    "description": "Mode is the octal permission for created directories.",
+                    "type": "string",
+                    "example": "0755"
+                },
+                "parents": {
+                    "description": "Parents creates missing parent directories, like mkdir -p.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "path": {
+                    "type": "string",
+                    "maxLength": 4096,
+                    "example": "/home/sandbox/project"
+                }
+            }
+        },
+        "presentation.ReadinessResponseDoc": {
+            "type": "object",
+            "properties": {
+                "build": {
+                    "description": "Build identifies the exact service binary answering the probe.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.BuildInfoDoc"
+                        }
+                    ]
+                },
+                "checks": {
+                    "description": "Checks maps component names to their readiness status or error.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "description": "Status is ok when the sandbox engine is ready, otherwise unhealthy.",
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "presentation.SandboxEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.SandboxResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SandboxListEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.SandboxResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SandboxResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "failure_reason": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "sbx_01jbq3w4k7m2x9z8a1b2c3d4e5"
+                },
+                "idle_timeout_seconds": {
+                    "type": "integer",
+                    "example": 600
+                },
+                "image": {
+                    "type": "string",
+                    "example": "alpine"
+                },
+                "ip_address": {
+                    "type": "string",
+                    "example": "10.88.0.2"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "last_activity_at": {
+                    "type": "string"
+                },
+                "limits": {
+                    "$ref": "#/definitions/presentation.LimitsResponse"
+                },
+                "network": {
+                    "type": "string",
+                    "example": "none"
+                },
+                "state": {
+                    "type": "string",
+                    "example": "running"
+                },
+                "stats": {
+                    "$ref": "#/definitions/presentation.SandboxStatsResponse"
+                },
+                "stop_reason": {
+                    "type": "string",
+                    "example": "expired"
+                },
+                "stopped_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "presentation.SandboxStatsEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.SandboxStatsResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SandboxStatsResponse": {
+            "type": "object",
+            "properties": {
+                "cpu_usage_micros": {
+                    "type": "integer",
+                    "example": 152000
+                },
+                "memory_bytes": {
+                    "description": "MemoryBytes is current memory usage, including tmpfs-backed storage.",
+                    "type": "integer",
+                    "example": 10485760
+                },
+                "memory_limit_bytes": {
+                    "type": "integer",
+                    "example": 536870912
+                },
+                "memory_peak_bytes": {
+                    "type": "integer",
+                    "example": 20971520
+                },
+                "oom_kills": {
+                    "description": "OOMKills counts processes killed for exceeding the memory limit.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "pids_current": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "pids_limit": {
+                    "type": "integer",
+                    "example": 256
+                },
+                "storage_limit_bytes": {
+                    "type": "integer",
+                    "example": 536870912
+                },
+                "storage_used_bytes": {
+                    "type": "integer",
+                    "example": 4096
+                }
+            }
+        },
+        "presentation.SessionEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.SessionResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SessionExecRequest": {
+            "type": "object",
+            "required": [
+                "command"
+            ],
+            "properties": {
+                "command": {
+                    "description": "Command is written to the session shell; shell state (cwd, variables) persists afterwards.",
+                    "type": "string",
+                    "maxLength": 131072,
+                    "example": "cd /tmp \u0026\u0026 export X=1"
+                },
+                "timeout_seconds": {
+                    "description": "TimeoutSeconds terminates the session when exceeded, because the shell state is then undefined.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 60
+                }
+            }
+        },
+        "presentation.SessionListEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.SessionResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SessionResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "ses_01jbq3w4k7m2x9z8a1b2c3d4e5"
+                },
+                "last_activity_at": {
+                    "type": "string"
+                },
+                "sandbox_id": {
+                    "type": "string",
+                    "example": "sbx_01jbq3w4k7m2x9z8a1b2c3d4e5"
+                },
+                "shell": {
+                    "type": "string",
+                    "example": "bash"
+                },
+                "state": {
+                    "type": "string",
+                    "example": "idle"
+                },
+                "user": {
+                    "type": "string",
+                    "example": "root"
+                }
+            }
+        },
+        "presentation.TerminalControlMessage": {
+            "type": "object",
+            "properties": {
+                "cols": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "exit_code": {
+                    "type": "integer"
+                },
+                "rows": {
+                    "type": "integer"
+                },
+                "signal": {
+                    "type": "string"
+                },
+                "terminal_id": {
+                    "type": "string",
+                    "example": "term-4f1c2a9b8e7d6c5b4a3f2e1d"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "exit"
+                }
+            }
+        },
+        "presentation.TerminalTicketEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.TerminalTicketResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.TerminalTicketResponse": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string",
+                    "example": "2026-10-29T10:00:30Z"
+                },
+                "ticket": {
+                    "description": "Ticket is single-use and valid only for this sandbox's terminal endpoint.",
+                    "type": "string",
+                    "example": "0000000000000000000000000000000000000000000000000000000000000000"
+                }
+            }
+        },
+        "presentation.ValidationErrorDoc": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "description": "Field is the request field that failed validation.",
+                    "type": "string",
+                    "example": "memory_mb"
+                },
+                "param": {
+                    "description": "Param is the validation rule parameter, when the rule takes one.",
+                    "type": "string",
+                    "example": "16"
+                },
+                "tag": {
+                    "description": "Tag is the validation rule that failed.",
+                    "type": "string",
+                    "example": "gte"
+                },
+                "value": {
+                    "description": "Value is the rejected field value, when available.",
+                    "type": "string",
+                    "example": "4"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "API key as \"Bearer \u003ckey\u003e\".",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    },
+    "tags": [
+        {
+            "description": "Liveness and readiness probes.",
+            "name": "health"
+        },
+        {
+            "description": "Base root filesystems available to sandboxes.",
+            "name": "images"
+        },
+        {
+            "description": "Sandbox creation, inspection, lifetime extension, and destruction.",
+            "name": "sandboxes"
+        },
+        {
+            "description": "One-shot command execution, buffered or streamed over Server-Sent Events.",
+            "name": "exec"
+        },
+        {
+            "description": "Persistent shell sessions whose state carries across commands.",
+            "name": "sessions"
+        },
+        {
+            "description": "File upload, download, listing, and management inside a sandbox.",
+            "name": "files"
+        }
+    ]
+}

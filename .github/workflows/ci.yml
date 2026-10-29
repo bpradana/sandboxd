@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint (linux)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.13.2
+      - name: golangci-lint (darwin stubs)
+        uses: golangci/golangci-lint-action@v8
+        env:
+          GOOS: darwin
+        with:
+          version: v2.13.2
+          install-mode: none
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./... && GOOS=darwin go vet ./...
+      - run: go test -race -count=1 ./...
+      - name: Build static binary
+        run: CGO_ENABLED=0 go build -trimpath -o target/sandboxdctl ./cmd/cli
+
+  e2e:
+    name: End-to-end (real kernel)
+    runs-on: ubuntu-24.04
+    env:
+      SANDBOX_TERMINAL_DETACH_TIMEOUT: 15s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start sandboxd
+        run: docker compose up -d --build --wait sandboxd
+      - name: Import the Alpine base image
+        run: docker compose exec -T sandboxd sh ./scripts/fetch-image.sh alpine
+      - name: Run the end-to-end suite
+        run: >
+          docker compose run --rm
+          -e SANDBOXD_E2E_URL=http://sandboxd:8080
+          -e SANDBOXD_E2E_INTERNET=1
+          -e SANDBOXD_E2E_DETACH_TIMEOUT=15s
+          sandboxd-test go test -v -count=1 -tags=e2e ./test/...
+      - name: Server logs
+        if: failure()
+        run: docker compose logs sandboxd
