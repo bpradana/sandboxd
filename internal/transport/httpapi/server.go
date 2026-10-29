@@ -69,7 +69,7 @@ func NewServer(params ServerParams) (*fiber.App, error) {
 	}))
 
 	if params.Telemetry.Enabled && params.TracerProvider != nil {
-		app.Use(fiberotel.Middleware(
+		app.Use(fiberotel.New(
 			fiberotel.WithTracerProvider(params.TracerProvider),
 			fiberotel.WithCustomAttributes(func(c fiber.Ctx) []attribute.KeyValue {
 				return []attribute.KeyValue{
