@@ -22,11 +22,11 @@ jobs:
         with:
           go-version-file: go.mod
       - name: golangci-lint (linux)
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
       - name: golangci-lint (darwin stubs)
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         env:
           GOOS: darwin
         with:
