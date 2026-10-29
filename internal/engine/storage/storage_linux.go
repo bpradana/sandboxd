@@ -29,14 +29,23 @@ type Driver interface {
 	// the sandbox's memory limit must then make room for.
 	ChargesMemory() bool
 	// Create makes dir, a new directory whose contents may total at most
-	// limitBytes. Writes beyond fail with EDQUOT or ENOSPC.
-	Create(dir string, limitBytes int64) error
+	// opts.Size bytes. Writes beyond fail with EDQUOT or ENOSPC.
+	Create(dir string, opts Options) error
 	// Usage returns the bytes stored under dir. Some drivers account lazily
 	// (btrfs updates usage when a transaction commits).
 	Usage(dir string) (int64, error)
 	// Remove deletes dir and releases its accounting. It also removes
 	// directories another driver created, and a missing dir is not an error.
 	Remove(dir string) error
+}
+
+// Options size a new directory.
+type Options struct {
+	// Size is the hard limit on stored bytes.
+	Size int64
+	// MemoryBytes is the memory limit of the sandbox writing to it. Disk
+	// storage keeps unwritten file data well below it (see DirtyLimit).
+	MemoryBytes int64
 }
 
 // Open returns the driver kind ("disk" or "tmpfs"). For disk, fs selects the
@@ -70,7 +79,7 @@ func Probe(driver Driver, parent string) error {
 	if err := driver.Remove(dir); err != nil {
 		return fmt.Errorf("remove stale probe: %w", err)
 	}
-	if err := driver.Create(dir, probeLimit); err != nil {
+	if err := driver.Create(dir, Options{Size: probeLimit}); err != nil {
 		return fmt.Errorf("%s storage: create a limited directory: %w", driver.Name(), err)
 	}
 	defer func() { _ = driver.Remove(dir) }()

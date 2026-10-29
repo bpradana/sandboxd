@@ -177,8 +177,9 @@ func (m *Manager) Create(id string, limits Limits) (string, *os.File, error) {
 		return "", nil, fmt.Errorf("create sandbox cgroup: %w", err)
 	}
 
+	memoryMax := int64(limits.MemoryMB+limits.StorageMB) << 20
 	settings := []struct{ file, value string }{
-		{"memory.max", strconv.FormatInt(int64(limits.MemoryMB+limits.StorageMB)<<20, 10)},
+		{"memory.max", strconv.FormatInt(memoryMax, 10)},
 		// Only the offending process is OOM-killed; init is protected by its
 		// oom_score_adj, so one runaway command does not end the sandbox.
 		{"memory.oom.group", "0"},

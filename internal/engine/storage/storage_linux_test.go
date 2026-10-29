@@ -19,3 +19,19 @@ func TestLoopStructSizes(t *testing.T) {
 		t.Errorf("sizeof(loop_config) = %d, want 304", got)
 	}
 }
+
+func TestDirtyLimitIsAQuarterOfMemoryWithinBounds(t *testing.T) {
+	t.Parallel()
+
+	cases := map[int64]int64{
+		16 << 20:  4 << 20,  // floor
+		64 << 20:  16 << 20, // a quarter
+		512 << 20: 64 << 20, // ceiling
+		8 << 30:   64 << 20, // ceiling
+	}
+	for memory, want := range cases {
+		if got := DirtyLimit(memory); got != want {
+			t.Errorf("DirtyLimit(%d) = %d, want %d", memory, got, want)
+		}
+	}
+}

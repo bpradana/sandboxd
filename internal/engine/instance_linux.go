@@ -108,7 +108,10 @@ func (i *instance) closePipes() {
 func (e *linuxEngine) mountStorage(inst *instance, lower string) error {
 	scratch := inst.scratchDir()
 	uidBase := e.sandboxCfg.UIDMapBase
-	if err := e.storage.Create(scratch, int64(inst.spec.Limits.StorageMB)<<20); err != nil {
+	if err := e.storage.Create(scratch, storage.Options{
+		Size:        int64(inst.spec.Limits.StorageMB) << 20,
+		MemoryBytes: int64(inst.spec.Limits.MemoryMB) << 20,
+	}); err != nil {
 		return fmt.Errorf("create %s storage: %w", e.storage.Name(), err)
 	}
 

@@ -19,7 +19,8 @@ All notable changes to this project are documented here. The format follows
 - Root inside sandboxes by default (unprivileged on the host, reduced capability set),
   so package managers work; an unprivileged `sandbox` user is also available.
 - Disk-backed storage: a loop-mounted ext4 or btrfs image per sandbox, with tmpfs as an
-  alternative.
+  alternative. Unwritten data per storage device is capped relative to the sandbox's
+  memory, so writing files larger than memory throttles instead of OOM-killing.
 - `egress` networking with NAT and nftables rules that block private, link-local,
   metadata, and host destinations.
 - Sandbox-scoped `/proc/meminfo` and a read-only `/sys/fs/cgroup`.

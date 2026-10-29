@@ -99,7 +99,8 @@ func (d *diskImage) Name() string { return "disk/" + d.fs }
 
 func (d *diskImage) ChargesMemory() bool { return false }
 
-func (d *diskImage) Create(dir string, limitBytes int64) error {
+func (d *diskImage) Create(dir string, opts Options) error {
+	limitBytes := opts.Size
 	if limitBytes < MinBytes {
 		return fmt.Errorf("storage of %d bytes is below the minimum of %d", limitBytes, MinBytes)
 	}
@@ -116,13 +117,17 @@ func (d *diskImage) Create(dir string, limitBytes int64) error {
 	if err == nil {
 		err = os.Mkdir(dir, 0o700)
 	}
+	var device string
 	if err == nil {
-		err = d.mount(image, dir)
+		device, err = d.mount(image, dir)
 	}
 	if err != nil {
 		_ = d.Remove(dir)
 		return err
 	}
+	// Best effort: kernels before 6.2 lack the per-device limits, and the
+	// sandbox then relies on global writeback throttling alone.
+	_ = setDirtyLimit(d.fs, device, DirtyLimit(opts.MemoryBytes))
 	// The filesystem's root replaces the directory; keep it private.
 	return os.Chmod(dir, 0o700) // #nosec G302 -- a directory: owner needs search permission.
 }
@@ -152,10 +157,12 @@ func (d *diskImage) mkfs(image string, size int64) error {
 	return nil
 }
 
-func (d *diskImage) mount(image, dir string) error {
+// mount attaches image to a loop device and mounts it at dir, returning the
+// device name ("loop3").
+func (d *diskImage) mount(image, dir string) (string, error) {
 	device, loop, err := attachLoop(image)
 	if err != nil {
-		return err
+		return "", err
 	}
 	// The loop device clears itself once nothing holds it, so the mount
 	// must exist before this descriptor closes.
@@ -165,9 +172,67 @@ func (d *diskImage) mount(image, dir string) error {
 		options = "discard=async"
 	}
 	if err := unix.Mount(device, dir, d.fs, unix.MS_NOSUID|unix.MS_NODEV, options); err != nil {
-		return fmt.Errorf("mount %s storage: %w", d.fs, err)
+		return "", fmt.Errorf("mount %s storage: %w", d.fs, err)
 	}
-	return nil
+	return filepath.Base(device), nil
+}
+
+// Bounds of the unwritten-data limit per sandbox storage device.
+const (
+	minDirtyLimit = 4 << 20
+	maxDirtyLimit = 64 << 20
+)
+
+// DirtyLimit is how much unwritten file data a sandbox's storage device may
+// hold: a quarter of the sandbox's memory, within [4 MiB, 64 MiB]. File pages
+// are charged to the sandbox and cannot be reclaimed until written back
+// through the loop device. The global writeback limits are sized for the
+// whole host, so without a per-device limit a fast writer in a small sandbox
+// fills its memory with dirty pages and is OOM-killed (observed: most 600 MiB
+// writes with 16 MiB of memory). Unlike memory.high, this throttles only
+// writers to the storage, not processes using anonymous memory.
+func DirtyLimit(memoryBytes int64) int64 {
+	return min(max(memoryBytes/4, minDirtyLimit), maxDirtyLimit)
+}
+
+// setDirtyLimit applies a strict writeback limit (Linux 6.2) to the backing
+// device info of the filesystem on device. btrfs registers its own per
+// filesystem; others use the block device's.
+func setDirtyLimit(fs, device string, limit int64) error {
+	bdi, err := bdiDir(fs, device)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(bdi, "max_bytes"), []byte(strconv.FormatInt(limit, 10)), 0o644); err != nil { // #nosec G306 -- sysfs.
+		return err
+	}
+	return os.WriteFile(filepath.Join(bdi, "strict_limit"), []byte("1"), 0o644) // #nosec G306 -- sysfs.
+}
+
+// resetDirtyLimit restores a loop device's defaults so the next user of the
+// device does not inherit a sandbox's limit. btrfs's own device info goes
+// away with the filesystem.
+func resetDirtyLimit(fs, device string) {
+	if fs == "btrfs" {
+		return
+	}
+	bdi, err := bdiDir(fs, device)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(bdi, "strict_limit"), []byte("0"), 0o644) // #nosec G306 -- sysfs.
+	_ = os.WriteFile(filepath.Join(bdi, "max_ratio"), []byte("100"), 0o644)  // #nosec G306 -- sysfs.
+}
+
+func bdiDir(fs, device string) (string, error) {
+	if fs != "btrfs" {
+		return filepath.EvalSymlinks(filepath.Join("/sys/block", device, "bdi"))
+	}
+	members, err := filepath.Glob(filepath.Join("/sys/fs/btrfs/*/devices", device))
+	if err != nil || len(members) != 1 {
+		return "", fmt.Errorf("btrfs filesystem on %s not found", device)
+	}
+	return filepath.EvalSymlinks(filepath.Join(filepath.Dir(filepath.Dir(members[0])), "bdi"))
 }
 
 func (d *diskImage) Usage(dir string) (int64, error) {
@@ -181,10 +246,13 @@ func (d *diskImage) Usage(dir string) (int64, error) {
 // Remove unmounts and deletes the directory and its image. A loop device
 // left attached by a crash is detached too.
 func (d *diskImage) Remove(dir string) error {
+	image := dir + ".img"
+	for _, device := range loopsBackedBy(image) {
+		resetDirtyLimit(d.fs, device)
+	}
 	if err := removeTree(dir); err != nil {
 		return err
 	}
-	image := dir + ".img"
 	if err := os.Remove(image); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -251,14 +319,14 @@ func openLoopDevice(device string, number uint32) (*os.File, error) {
 	return loop, nil
 }
 
-// detachLoopsBackedBy clears loop devices still bound to image, which only
-// happens when a process died between attaching and mounting.
-func detachLoopsBackedBy(image string) {
-	devices, err := filepath.Glob("/sys/block/loop*/loop/backing_file")
+// loopsBackedBy names the loop devices ("loop3") bound to image.
+func loopsBackedBy(image string) []string {
+	paths, err := filepath.Glob("/sys/block/loop*/loop/backing_file")
 	if err != nil {
-		return
+		return nil
 	}
-	for _, path := range devices {
+	var devices []string
+	for _, path := range paths {
 		file, err := os.Open(path) // #nosec G304 -- sysfs path from the glob.
 		if err != nil {
 			continue
@@ -269,10 +337,17 @@ func detachLoopsBackedBy(image string) {
 			backing = strings.TrimSuffix(scanner.Text(), " (deleted)")
 		}
 		_ = file.Close()
-		if backing != image {
-			continue
+		if backing == image {
+			devices = append(devices, filepath.Base(filepath.Dir(filepath.Dir(path))))
 		}
-		name := filepath.Base(filepath.Dir(filepath.Dir(path)))
+	}
+	return devices
+}
+
+// detachLoopsBackedBy clears loop devices still bound to image, which only
+// happens when a process died between attaching and mounting.
+func detachLoopsBackedBy(image string) {
+	for _, name := range loopsBackedBy(image) {
 		loop, err := os.OpenFile("/dev/"+name, os.O_RDWR, 0) // #nosec G304 -- loop device path.
 		if err != nil {
 			continue

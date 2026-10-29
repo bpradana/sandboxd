@@ -17,7 +17,8 @@ func (tmpfs) Name() string { return "tmpfs" }
 
 func (tmpfs) ChargesMemory() bool { return true }
 
-func (tmpfs) Create(dir string, limitBytes int64) error {
+func (tmpfs) Create(dir string, opts Options) error {
+	limitBytes := opts.Size
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		return err
 	}

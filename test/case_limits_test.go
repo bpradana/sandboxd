@@ -87,6 +87,22 @@ func (s *e2eSuite) runLimitsCase(t *testing.T) {
 		s.mustSucceed(t, disk.ID, "rm /root/big && sync && dd if=/dev/zero of=/root/again bs=1M count=150 2>/dev/null")
 	})
 
+	t.Run("writing files larger than memory does not OOM", func(t *testing.T) {
+		// File pages are charged to the sandbox until written back; without
+		// the storage device's dirty limit, most of these writes were
+		// OOM-killed within 50 ms.
+		small := s.createSandbox(t, presentation.CreateSandboxRequest{MemoryMB: 16, StorageMB: 512})
+		for i := range 3 {
+			result := s.exec(t, small.ID, "dd if=/dev/zero of=/root/big bs=1M count=300 2>/dev/null", 60)
+			if result.ExitCode != 0 {
+				t.Fatalf("write %d of 300 MiB with 16 MiB of memory: %+v", i+1, result)
+			}
+		}
+		if stats := s.stats(t, small.ID); stats.OOMKills != 0 {
+			t.Fatalf("oom kills = %d", stats.OOMKills)
+		}
+	})
+
 	t.Run("output is truncated at the cap", func(t *testing.T) {
 		result := s.exec(t, sandbox.ID, "head -c 5000000 /dev/zero | tr '\\0' a", 30)
 		if !result.StdoutTruncated || len(result.Stdout) >= 5000000 {

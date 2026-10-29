@@ -559,6 +559,9 @@ websocat "wss://sandboxd.example.com/api/v1/sandboxes/$ID/terminal?ticket=$TICKE
 - With tmpfs storage, the ceiling is `memory_mb + storage_mb`, because storage is RAM.
 - Writes past the limit fail with `ENOSPC`, or `507 storage_full` through the file API.
   Deleting files frees space.
+- Unwritten file data on a sandbox's storage is capped at a quarter of its memory
+  (4–64 MiB; Linux ≥ 6.2). Large writes are then throttled to the disk's speed instead
+  of filling the sandbox's memory and getting the writer OOM-killed.
 - Exceeding memory OOM-kills the offending process only. The sandbox keeps running, and
   `stats.oom_kills` increments.
 - Inside a sandbox, `/proc/meminfo` and a read-only `/sys/fs/cgroup` describe the
