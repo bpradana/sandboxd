@@ -74,6 +74,8 @@ type SandboxStatsEnvelopeDoc = EnvelopeDoc[SandboxStatsResponse]
 
 type ImageListEnvelopeDoc = EnvelopeDoc[[]ImageResponse]
 
+type ImageEnvelopeDoc = EnvelopeDoc[ImageResponse]
+
 type ExecEnvelopeDoc = EnvelopeDoc[ExecResponse]
 
 type SessionEnvelopeDoc = EnvelopeDoc[SessionResponse]

@@ -54,6 +54,17 @@ function fixture(t, { view } = {}) {
     if (method === "POST" && parsed.pathname.endsWith("/mkdir")) {
       const body = JSON.parse(options.body); files.set(body.path, { type: "dir" }); return json({});
     }
+    if (parsed.pathname.endsWith("/changes")) {
+      return json({
+        entries: [
+          { path: "/etc/resolv.conf", kind: "modified", type: "file", size: 20, mode: "0644", modified_at: "2026-10-30T16:00:00Z", seeded: true },
+          { path: "/project/app.py", kind: "modified", type: "file", size: 15, mode: "0755", modified_at: "2026-10-30T16:00:00Z", seeded: false },
+          { path: "/project/out", kind: "added", type: "dir", size: 0, mode: "0755", modified_at: "2026-10-30T16:00:00Z", seeded: false },
+          { path: "/project/gone.txt", kind: "deleted", size: 0, seeded: false },
+        ],
+        truncated: false,
+      });
+    }
     const file = files.get(path);
     if (method === "PUT") {
       files.set(path, { type: "file", mode: parsed.searchParams.get("mode"), bytes: new Uint8Array(await new Response(options.body).arrayBuffer()) }); return json({});
@@ -276,4 +287,44 @@ test("the tree opens folders in place and names kind, size and date", async (t) 
   await f.explorer.run((ctx) => f.explorer.toggle(project(), ctx));
   assert.equal(f.calls.length, reads);
   assert.equal(rows().length, 5);
+});
+
+test("the change list names what the workload did and hides the daemon's own files", async (t) => {
+  const f = fixture(t);
+  await f.explorer.open({ id: "sandbox-a" });
+  const rows = () => [...f.document.querySelectorAll("#files-changes-list tr")];
+  const note = () => f.document.querySelector("#files-changes-note").textContent;
+
+  await f.explorer.toggleChanges();
+  assert.equal(f.document.querySelector("#files-pane-changes").hidden, false);
+  assert.equal(f.document.querySelector("#files-pane-list").hidden, true);
+  // A folder view makes no sense for a whole-sandbox list.
+  assert.equal(f.document.querySelector(".view-switch").hidden, true);
+  assert.equal(f.document.querySelector("#files-changes").textContent, "Folder");
+
+  assert.equal(rows().length, 3);
+  assert.match(note(), /1 file the daemon writes into every sandbox hidden/);
+  const kinds = rows().map((row) => row.querySelectorAll("td")[1].textContent);
+  assert.ok(kinds.some((kind) => kind.startsWith("modified")) && kinds.some((kind) => kind.startsWith("deleted")));
+  assert.equal(f.document.querySelector("#files-count").textContent, "3 changes");
+
+  // A deleted path has nothing left to open, or to size.
+  const deleted = rows().find((row) => row.textContent.includes("gone.txt"));
+  assert.equal(deleted.querySelector(".files-change-path").disabled, true);
+  assert.equal(deleted.querySelectorAll("td")[2].textContent, "");
+
+  f.document.querySelector("#files-changes-seeded").checked = true;
+  f.document.querySelector("#files-changes-seeded").onchange();
+  assert.equal(rows().length, 4);
+  assert.ok(rows().some((row) => row.textContent.includes("/etc/resolv.conf")));
+
+  // A changed file opens in the editor from here.
+  const edited = rows().find((row) => row.textContent.includes("app.py"));
+  edited.querySelector(".files-change-path").onclick();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.match(f.document.querySelector("#files-editor").value, /hello/);
+
+  await f.explorer.toggleChanges();
+  assert.equal(f.document.querySelector("#files-pane-changes").hidden, true);
+  assert.equal(f.document.querySelector(".view-switch").hidden, false);
 });

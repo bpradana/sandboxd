@@ -76,6 +76,8 @@ $ curl -s -XPOST localhost:8080/api/v1/sandboxes/sbx-1f0c…/exec \
 | 💾 **Disk-backed storage** | Each sandbox gets its own ext4 or btrfs filesystem in a sparse image file, capped at its storage size and allocated as data is written. tmpfs is available as an alternative. |
 | ⚡ **Three ways to run code** | One-shot `exec` (buffered or streamed as Server-Sent Events), persistent shell sessions that keep state between calls, and interactive PTY terminals over WebSocket that survive disconnects. |
 | 📁 **Safe file API** | Upload, download, list, stat, mkdir, and remove. Every path resolves inside the sandbox, including through symlinks. |
+| 🔍 **Knows what changed** | Every sandbox is an overlay on its image, so the writable layer already records what the workload created, edited, and deleted. `GET /sandboxes/{id}/changes` reads it: one walk of what changed, never a comparison against the image. |
+| 🧬 **Snapshots become images** | Promote a snapshot to a base image and the packages, sources, and setup one sandbox prepared become the starting point of every sandbox after it, at no cost per start. |
 | ☁️ **Cloud filesystem snapshots** | Save-and-stop a sandbox into S3-compatible storage, then restore its files, installed packages, and configuration on the same host or another host of the same architecture. |
 | 🌐 **Controlled networking** | `none` (loopback only) or `egress` (internet through NAT, with private, link-local, cloud-metadata, and host addresses blocked). |
 | 🧹 **Automatic cleanup** | Sandboxes are reaped at their TTL or when idle. Shutdown destroys every sandbox, and startup removes anything a crash left behind. |
@@ -432,6 +434,46 @@ Content-Security-Policy. It holds no secrets: every action goes through `/api/v1
 the key you enter, which is stored only in your browser. Anyone with a key gets a shell
 in any sandbox, so expose the console accordingly.
 
+## MCP server
+
+AI agents reach sandboxd over the Model Context Protocol. The server speaks
+stdio, the transport MCP clients launch a server with, and is a client of the
+REST API like any other: it holds no privileges of its own and can point at a
+daemon on another host.
+
+```console
+$ sandboxdctl mcp --url http://localhost:8080 --api-key "$SANDBOXD_API_KEY"
+```
+
+Register it with an MCP client, for example Claude Code:
+
+```console
+$ claude mcp add sandboxd -- sandboxdctl mcp --url http://localhost:8080
+```
+
+`SANDBOXD_URL` and `SANDBOXD_API_KEY` are read when the flags are omitted.
+Whatever the key is allowed to do, the agent can do; nothing more.
+
+| Tool | What an agent uses it for |
+| --- | --- |
+| `sandbox_create` · `sandbox_list` · `sandbox_destroy` | Get a disposable Linux machine, and give it back |
+| `sandbox_keepalive` | Extend one that is still in use |
+| `sandbox_exec` | Run a command and read its output |
+| `sandbox_start_service` | Start a server that keeps running after the call |
+| `sandbox_write_file` · `sandbox_read_file` · `sandbox_list_files` | Move code and results in and out |
+| `sandbox_ports` | Find what a started server is listening on |
+| `sandbox_preview` | Get a URL to hand to a person |
+
+Two of these exist because of how sandboxes behave, and the tool descriptions
+say so. `sandbox_exec` kills the command's process group when it returns, so
+backgrounding a server there loses it: `sandbox_start_service` runs it in a
+session, whose shell outlives the call. And a preview reaches the sandbox over
+loopback only, so `sandbox_preview` checks what is actually listening and says
+when the URL would not load rather than handing over a dead link.
+
+Sandboxes made through MCP default to a 30-minute lifetime, so an agent that
+forgets to call `sandbox_destroy` does not leave one running indefinitely.
+
 ## API
 
 ### File explorer
@@ -721,7 +763,47 @@ after success or failure. Restoring also creates a private expanded lower layer
 under the new sandbox directory, retained until that sandbox is destroyed. Allow
 host disk space for archives, expanded files, and the sandbox's writable storage.
 
-### API reference
+### MCP server
+
+AI agents reach sandboxd over the Model Context Protocol. The server speaks
+stdio, the transport MCP clients launch a server with, and is a client of the
+REST API like any other: it holds no privileges of its own and can point at a
+daemon on another host.
+
+```console
+$ sandboxdctl mcp --url http://localhost:8080 --api-key "$SANDBOXD_API_KEY"
+```
+
+Register it with an MCP client, for example Claude Code:
+
+```console
+$ claude mcp add sandboxd -- sandboxdctl mcp --url http://localhost:8080
+```
+
+`SANDBOXD_URL` and `SANDBOXD_API_KEY` are read when the flags are omitted.
+Whatever the key is allowed to do, the agent can do; nothing more.
+
+| Tool | What an agent uses it for |
+| --- | --- |
+| `sandbox_create` · `sandbox_list` · `sandbox_destroy` | Get a disposable Linux machine, and give it back |
+| `sandbox_keepalive` | Extend one that is still in use |
+| `sandbox_exec` | Run a command and read its output |
+| `sandbox_start_service` | Start a server that keeps running after the call |
+| `sandbox_write_file` · `sandbox_read_file` · `sandbox_list_files` | Move code and results in and out |
+| `sandbox_ports` | Find what a started server is listening on |
+| `sandbox_preview` | Get a URL to hand to a person |
+
+Two of these exist because of how sandboxes behave, and the tool descriptions
+say so. `sandbox_exec` kills the command's process group when it returns, so
+backgrounding a server there loses it: `sandbox_start_service` runs it in a
+session, whose shell outlives the call. And a preview reaches the sandbox over
+loopback only, so `sandbox_preview` checks what is actually listening and says
+when the URL would not load rather than handing over a dead link.
+
+Sandboxes made through MCP default to a 30-minute lifetime, so an agent that
+forgets to call `sandbox_destroy` does not leave one running indefinitely.
+
+## API reference
 
 The base path is `/api/v1`. The full OpenAPI specification is served at `/openapi.json`
 and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
@@ -743,8 +825,10 @@ and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
 | `PUT /sandboxes/{id}/snapshot-policy` | Configure scheduled/pre-expiry backups and retention |
 | `POST /sandboxes/{id}/previews` · `DELETE /sandboxes/{id}/previews` | Open or revoke an isolated app preview |
 | `GET /sandboxes/{id}/ports` | List the TCP ports listening inside the sandbox |
+| `GET /sandboxes/{id}/changes` | List every path the workload created, edited, or removed |
 | `GET /snapshots/progress` | Progress of running backups and restores |
 | `GET /snapshots` · `GET /snapshots/{id}` · `DELETE /snapshots/{id}` | List, inspect progress, or delete cloud snapshots |
+| `POST /snapshots/{id}/image` | Import a snapshot as a base image new sandboxes start from |
 | `GET` · `PUT` · `DELETE /settings/cloud-storage` | Inspect, test-and-save, or disconnect deployment-wide cloud storage |
 | `POST /settings/cloud-storage/test` | Test a candidate connection without saving credentials |
 
@@ -851,6 +935,57 @@ $ curl -s -H "$AUTH" $API/sandboxes/$ID/ports | jq -c '.data[]'
 The tables are read from the sandbox's own network namespace; nothing runs
 inside the sandbox to answer this. `previewable` is false for a port bound to an
 address a preview cannot dial, because previews connect over loopback only.
+
+### What a sandbox changed
+
+A sandbox's root is an overlay: a writable layer over a read-only base image.
+The kernel already records every path the workload touched in that layer, so
+answering "what did this change?" is a walk of what changed, never a comparison
+against the image. `GET /api/v1/sandboxes/{id}/changes` reads it:
+
+```console
+$ curl -s -H "$AUTH" $API/sandboxes/$ID/changes | jq -c '.data.entries[]'
+{"path":"/etc/apk/world","kind":"modified","type":"file","size":31,"mode":"0644","seeded":false}
+{"path":"/workspace/report.md","kind":"added","type":"file","size":412,"mode":"0644","seeded":false}
+{"path":"/etc/os-release","kind":"deleted","seeded":false}
+```
+
+- `added` is a path the image did not have, `modified` one it had that was then
+  written to, `deleted` one the sandbox removed, and `replaced` a directory
+  emptied of everything the image put in it.
+- A deleted path reports no type, size, mode or timestamp: nothing is left of it
+  to describe.
+- A directory the image already had is not reported for merely holding a changed
+  file. The changed file is.
+- `seeded` marks the handful of paths the daemon writes into every sandbox
+  (`/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf`, the sandbox account, and
+  the directories mounts go on). It says the daemon writes there, not that the
+  workload left it alone, so hide them only when looking for the workload's work.
+- `truncated` reports a sandbox that changed more paths than the daemon will
+  list, which installing a large package tree will do.
+
+The file explorer shows the same list behind its **Changes** button, and the
+`sandbox_changes` MCP tool gives it to an agent.
+
+### Snapshots as base images
+
+`POST /api/v1/snapshots/{id}/image` imports a ready snapshot as a base image, so
+the packages and sources one sandbox prepared become the starting point of every
+sandbox after it:
+
+```console
+$ curl -s -H "$AUTH" -XPOST $API/snapshots/$SNAP/image -d '{"image":"python-ready"}' | jq -r .data.name
+python-ready
+$ curl -s -H "$AUTH" -XPOST $API/sandboxes -d '{"image":"python-ready"}' | jq -r .data.id
+sbx-9c2e4a7b1f3d5e8a0c6b2d4f
+```
+
+It is the restore path without the sandbox: the same archive, the same checks
+that it belongs on this host (format version and architecture), and the same
+confined extraction with ownership shifted into the sandbox id range, setuid
+bits stripped, and device nodes skipped. The name must be free and must match
+`[a-z0-9][a-z0-9._-]{0,63}`; the console offers it as **Use as image** on a
+snapshot card.
 
 ## Behaviour reference
 

@@ -28,6 +28,8 @@ type Service interface {
 	Get(ctx context.Context, id string) (*presentation.SandboxResponse, error)
 	List(ctx context.Context, req presentation.ListSandboxesRequest) ([]presentation.SandboxResponse, error)
 	Stats(ctx context.Context, id string) (*presentation.SandboxStatsResponse, error)
+	// Changes reports what the sandbox's workload did to its filesystem.
+	Changes(ctx context.Context, id string) (*presentation.SandboxChangesResponse, error)
 	Keepalive(ctx context.Context, id string, req presentation.KeepaliveRequest) (*presentation.SandboxResponse, error)
 	Destroy(ctx context.Context, id string) error
 	CreateSnapshot(ctx context.Context, id string, req presentation.CreateSnapshotRequest) (*presentation.SnapshotResponse, error)
@@ -40,6 +42,8 @@ type Service interface {
 	// SnapshotJobs lists running backups and restores from memory alone.
 	SnapshotJobs() []presentation.SnapshotJobResponse
 	DeleteSnapshot(ctx context.Context, id string) error
+	// PromoteSnapshot imports a stored snapshot as a base image.
+	PromoteSnapshot(ctx context.Context, id string, req presentation.PromoteSnapshotRequest) (*presentation.ImageResponse, error)
 	GetCloudStorage(ctx context.Context) (*presentation.CloudStorageResponse, error)
 	TestCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) error
 	SaveCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) (*presentation.CloudStorageResponse, error)

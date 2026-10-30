@@ -71,6 +71,21 @@ func (mr *MockEngineMockRecorder) CaptureSnapshot(ctx, id, dst, maxBytes any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CaptureSnapshot", reflect.TypeOf((*MockEngine)(nil).CaptureSnapshot), ctx, id, dst, maxBytes)
 }
 
+// Changes mocks base method.
+func (m *MockEngine) Changes(ctx context.Context, id string) (*ChangeSet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Changes", ctx, id)
+	ret0, _ := ret[0].(*ChangeSet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Changes indicates an expected call of Changes.
+func (mr *MockEngineMockRecorder) Changes(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changes", reflect.TypeOf((*MockEngine)(nil).Changes), ctx, id)
+}
+
 // CloseSession mocks base method.
 func (m *MockEngine) CloseSession(ctx context.Context, id, sessionID string) error {
 	m.ctrl.T.Helper()
@@ -171,6 +186,21 @@ func (m *MockEngine) Images(ctx context.Context) ([]Image, error) {
 func (mr *MockEngineMockRecorder) Images(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Images", reflect.TypeOf((*MockEngine)(nil).Images), ctx)
+}
+
+// ImportImage mocks base method.
+func (m *MockEngine) ImportImage(ctx context.Context, name string, src io.Reader, maxBytes int64) (*Image, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImportImage", ctx, name, src, maxBytes)
+	ret0, _ := ret[0].(*Image)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportImage indicates an expected call of ImportImage.
+func (mr *MockEngineMockRecorder) ImportImage(ctx, name, src, maxBytes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportImage", reflect.TypeOf((*MockEngine)(nil).ImportImage), ctx, name, src, maxBytes)
 }
 
 // ListDir mocks base method.

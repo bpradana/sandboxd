@@ -10,6 +10,9 @@ const PHASE_LABELS = {
   importing: "Importing into a new sandbox",
 };
 
+// A promotion runs a restore's two phases but builds an image, not a sandbox.
+const PROMOTE_LABELS = { importing: "Importing as a base image" };
+
 // describeJob turns one progress payload into what the card shows. percent is
 // null while the total is unknown, which is every capture: an archive's size
 // is only settled once it has been written.
@@ -20,7 +23,8 @@ export function describeJob(progress) {
   // A server that reports more than it promised must not overflow the bar.
   const fraction = known ? Math.min(1, done / total) : 0;
   return {
-    label: PHASE_LABELS[progress?.phase] || progress?.phase || "Working",
+    label: (progress?.operation === "promote" ? PROMOTE_LABELS[progress?.phase] : null)
+      || PHASE_LABELS[progress?.phase] || progress?.phase || "Working",
     amount: known ? `${formatBytes(done)} / ${formatBytes(total)}` : formatBytes(done),
     percent: known ? Math.round(fraction * 100) : null,
     fraction,

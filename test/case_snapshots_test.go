@@ -160,6 +160,31 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 	if cloud.rangedDownloads.Load() == 0 || cloud.checksumVerifications.Load() == 0 {
 		t.Fatal("checksum verification or ranged restore was not exercised")
 	}
+	// The same archive promoted into a base image: what one sandbox prepared
+	// becomes the starting point of the next, with nothing downloaded at
+	// create time. This daemon's image store is the empty one it restarted
+	// with, so the image can only have come from the snapshot.
+	status, envelope = s.call(t, http.MethodPost, "/api/v1/snapshots/"+saved.ID+"/image", presentation.PromoteSnapshotRequest{Image: "promoted"})
+	requireStatus(t, status, http.StatusCreated, envelope)
+	if promoted := decode[presentation.ImageResponse](t, envelope); promoted.Name != "promoted" {
+		t.Fatalf("promotion returned %+v", promoted)
+	}
+	status, envelope = s.call(t, http.MethodGet, "/api/v1/images", nil)
+	requireStatus(t, status, http.StatusOK, envelope)
+	images := decode[[]presentation.ImageResponse](t, envelope)
+	if len(images) != 1 || images[0].Name != "promoted" {
+		t.Fatalf("image store holds %+v", images)
+	}
+	fromImage := s.createSandbox(t, presentation.CreateSandboxRequest{Image: "promoted", TTLSeconds: 60})
+	if out := s.mustSucceed(t, fromImage.ID, "cat /workspace/data; test ! -e /etc/alpine-release && echo deleted-stayed-deleted"); out != "persisted\ndeleted-stayed-deleted\n" {
+		t.Fatalf("a sandbox started from the promoted image: %q", out)
+	}
+	// A name already taken is a conflict, not a silent overwrite.
+	status, envelope = s.call(t, http.MethodPost, "/api/v1/snapshots/"+saved.ID+"/image", presentation.PromoteSnapshotRequest{Image: "promoted"})
+	requireStatus(t, status, http.StatusConflict, envelope)
+	status, envelope = s.call(t, http.MethodPost, "/api/v1/snapshots/"+saved.ID+"/image", presentation.PromoteSnapshotRequest{Image: "Not A Name"})
+	requireStatus(t, status, http.StatusBadRequest, envelope)
+
 	status, envelope = s.call(t, http.MethodDelete, "/api/v1/snapshots/"+saved.ID, nil)
 	requireStatus(t, status, http.StatusOK, envelope)
 	status, envelope = s.call(t, http.MethodGet, "/api/v1/snapshots/"+saved.ID, nil)

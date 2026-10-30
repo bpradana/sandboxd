@@ -44,6 +44,21 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// Changes mocks base method.
+func (m *MockService) Changes(ctx context.Context, id string) (*presentation.SandboxChangesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Changes", ctx, id)
+	ret0, _ := ret[0].(*presentation.SandboxChangesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Changes indicates an expected call of Changes.
+func (mr *MockServiceMockRecorder) Changes(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changes", reflect.TypeOf((*MockService)(nil).Changes), ctx, id)
+}
+
 // CloseSession mocks base method.
 func (m *MockService) CloseSession(ctx context.Context, id, sessionID string) error {
 	m.ctrl.T.Helper()
@@ -383,6 +398,21 @@ func (m *MockService) OpenFile(ctx context.Context, id string, req presentation.
 func (mr *MockServiceMockRecorder) OpenFile(ctx, id, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockService)(nil).OpenFile), ctx, id, req)
+}
+
+// PromoteSnapshot mocks base method.
+func (m *MockService) PromoteSnapshot(ctx context.Context, id string, req presentation.PromoteSnapshotRequest) (*presentation.ImageResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PromoteSnapshot", ctx, id, req)
+	ret0, _ := ret[0].(*presentation.ImageResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PromoteSnapshot indicates an expected call of PromoteSnapshot.
+func (mr *MockServiceMockRecorder) PromoteSnapshot(ctx, id, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PromoteSnapshot", reflect.TypeOf((*MockService)(nil).PromoteSnapshot), ctx, id, req)
 }
 
 // Ready mocks base method.

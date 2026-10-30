@@ -35,3 +35,12 @@ test("nonsense from the server never produces a broken bar", () => {
   assert.equal(describeJob({}).label, "Working");
   assert.equal(describeJob(undefined).label, "Working");
 });
+
+test("a promotion says it is building an image, not a sandbox", () => {
+  const promoting = describeJob({ operation: "promote", phase: "importing", bytes_done: 50, bytes_total: 100 });
+  assert.equal(promoting.label, "Importing as a base image");
+  // A restore still reads as a restore.
+  assert.equal(describeJob({ operation: "restore", phase: "importing" }).label, "Importing into a new sandbox");
+  // An unknown phase of a promotion falls back rather than inventing one.
+  assert.equal(describeJob({ operation: "promote", phase: "downloading" }).label, "Downloading from cloud storage");
+});

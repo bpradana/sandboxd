@@ -446,6 +446,25 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.ImageEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.ImageResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
   presentation.ImageListEnvelopeDoc:
     properties:
       code:
@@ -573,6 +592,17 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.PromoteSnapshotRequest:
+    properties:
+      image:
+        description: Image must match [a-z0-9][a-z0-9._-]{0,63} and must not already
+          exist.
+        example: python-ready
+        maxLength: 64
+        type: string
+    required:
+    - image
+    type: object
   presentation.ReadinessResponseDoc:
     properties:
       build:
@@ -595,6 +625,79 @@ definitions:
         type: string
     required:
     - id
+    type: object
+  presentation.SandboxChangeResponse:
+    properties:
+      kind:
+        description: |-
+          Kind is added for a path the image did not have, modified for one it
+          had that was then written to, deleted for one the sandbox removed, and
+          replaced for a directory emptied of everything the image put in it.
+        enum:
+        - added
+        - modified
+        - deleted
+        - replaced
+        example: added
+        type: string
+      mode:
+        example: "0644"
+        type: string
+      modified_at:
+        description: ModifiedAt is absent for a deletion, for the same reason as Type.
+        type: string
+      path:
+        example: /root/app.py
+        type: string
+      seeded:
+        description: |-
+          Seeded marks a path the daemon writes into every sandbox: its hostname,
+          hosts and resolv.conf, the sandbox account, and the directories mounts
+          go on. It reports that the daemon writes there, not that the workload
+          left it alone, so hide these only when looking for the workload's work.
+        example: false
+        type: boolean
+      size:
+        example: 128
+        type: integer
+      type:
+        description: |-
+          Type is file, dir, symlink or special. A deletion has none: the entry
+          is gone, and only the fact that it went is recorded.
+        example: file
+        type: string
+    type: object
+  presentation.SandboxChangesEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.SandboxChangesResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SandboxChangesResponse:
+    properties:
+      entries:
+        items:
+          $ref: '#/definitions/presentation.SandboxChangeResponse'
+        type: array
+      truncated:
+        description: |-
+          Truncated reports that the sandbox changed more paths than the daemon
+          is willing to list, so what follows is a prefix and not the whole set.
+        example: false
+        type: boolean
     type: object
   presentation.SandboxEnvelopeDoc:
     properties:
@@ -1202,6 +1305,45 @@ paths:
       security:
       - BearerAuth: []
       summary: Get a sandbox
+      tags:
+      - sandboxes
+  /api/v1/sandboxes/{id}/changes:
+    get:
+      description: Reports every path the sandbox's workload created, wrote to or
+        removed since it started, read straight out of the overlay's writable layer
+        rather than by comparing the sandbox against its base image. Entries marked
+        seeded are paths the daemon writes into every sandbox (hostname, hosts, resolv.conf,
+        the sandbox account, and the directories mounts go on); hide them when looking
+        for the workload's own work. A sandbox that changed more paths than the daemon
+        will list is reported truncated.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: What the workload changed.
+          schema:
+            $ref: '#/definitions/presentation.SandboxChangesEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running (sandbox_not_running).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List what the sandbox changed
       tags:
       - sandboxes
   /api/v1/sandboxes/{id}/exec:
@@ -2237,6 +2379,66 @@ paths:
       security:
       - BearerAuth: []
       summary: Get snapshot progress and metadata
+      tags:
+      - snapshots
+  /api/v1/snapshots/{id}/image:
+    post:
+      consumes:
+      - application/json
+      description: 'Turns a ready snapshot into a base image that later sandboxes
+        can start from, so prepared work (installed packages, checked-out source)
+        costs nothing per start instead of being installed again every time. The archive
+        is downloaded and extracted the way a restore extracts it: ownership shifted
+        into the sandbox id range, setuid bits stripped, device nodes skipped. The
+        snapshot must have been taken on this architecture, and the image name must
+        be free.'
+      parameters:
+      - description: Snapshot ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Name for the new base image.
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.PromoteSnapshotRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: The image that was created.
+          schema:
+            $ref: '#/definitions/presentation.ImageEnvelopeDoc'
+        "400":
+          description: Invalid request body, unusable image name, or a snapshot from
+            another architecture or format.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Snapshot not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Image name already taken, or the snapshot is not ready.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "429":
+          description: Maximum concurrent snapshot operations reached.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Filesystem snapshots are disabled.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Import a snapshot as a base image
       tags:
       - snapshots
   /healthz:

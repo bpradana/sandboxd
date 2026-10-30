@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `GET /sandboxes/{id}/changes`, listing every path a sandbox's workload
+  created, edited or removed, read out of the overlay's writable layer rather
+  than by comparing the sandbox against its base image. Paths the daemon writes
+  into every sandbox are marked seeded so they can be hidden. The file explorer
+  shows it behind a Changes button, and agents get it as `sandbox_changes`.
+- `POST /snapshots/{id}/image`, importing a ready snapshot as a base image, so
+  the packages and sources one sandbox prepared become the starting point of
+  every sandbox after it instead of being installed again on each start. The
+  console offers it as "Use as image" on a snapshot card.
 - S3 Transfer Acceleration for snapshot transfers, as a cloud storage setting
   and `SNAPSHOT_S3_ACCELERATE`, for daemons far from their bucket.
 - `GET /snapshots/progress`, listing running backups and restores from memory

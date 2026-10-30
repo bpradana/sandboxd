@@ -76,12 +76,21 @@ export class FileExplorer {
     this.columns = [];
     this.listings = new Map();
     this.expanded = new Set();
+    this.changesMode = false;
+    this.changes = null;
     this.$("files-close").onclick = () => this.close();
     this.dialog.addEventListener("cancel", (event) => { event.preventDefault(); this.close(); });
     this.dialog.addEventListener("close", () => { this.version++; this.abort?.abort(); });
     this.$("files-path-form").onsubmit = (event) => { event.preventDefault(); void this.run((ctx) => this.list(this.$("files-path").value, ctx)); };
     this.$("files-up").onclick = () => void this.run((ctx) => this.list(`${this.directory}/..`, ctx));
-    this.$("files-refresh").onclick = () => { this.listings.clear(); this.expanded.clear(); void this.run((ctx) => this.list(this.directory, ctx)); };
+    this.$("files-refresh").onclick = () => {
+      this.listings.clear();
+      this.expanded.clear();
+      if (this.changesMode) return void this.run((ctx) => this.loadChanges(ctx));
+      void this.run((ctx) => this.list(this.directory, ctx));
+    };
+    this.$("files-changes").onclick = () => void this.toggleChanges();
+    this.$("files-changes-seeded").onchange = () => this.render();
     for (const button of this.dialog.querySelectorAll("[data-view]")) button.onclick = () => void this.setView(button.getAttribute("data-view"));
     this.$("files-filter").oninput = () => this.render();
     this.$("files-new-file").onclick = () => this.showCreate("file");
@@ -122,6 +131,8 @@ export class FileExplorer {
     this.columns = [];
     this.listings.clear();
     this.expanded.clear();
+    this.changesMode = false;
+    this.changes = null;
     this.$("files-sandbox").textContent = sb.id;
     this.$("files-create-form").hidden = true;
     this.clearEditor();
@@ -197,10 +208,19 @@ export class FileExplorer {
   render() {
     const entries = this.visible();
     const shown = entries.slice(0, LIMIT);
-    this.dialog.setAttribute("data-view", this.view);
+    this.dialog.setAttribute("data-view", this.changesMode ? "changes" : this.view);
+    this.$("files-changes").textContent = this.changesMode ? "Folder" : "Changes";
+    this.dialog.querySelector(".view-switch").hidden = this.changesMode;
+    this.$("files-pane-changes").hidden = !this.changesMode;
     for (const view of VIEWS) {
       this.$(`files-view-${view}`).setAttribute("aria-pressed", String(view === this.view));
-      this.$(`files-pane-${view}`).hidden = view !== this.view;
+      this.$(`files-pane-${view}`).hidden = this.changesMode || view !== this.view;
+    }
+    if (this.changesMode) {
+      this.renderChanges();
+      this.$("files-empty").hidden = true;
+      this.buttons();
+      return;
     }
     if (this.view === "icons") this.renderTiles(this.$("files-pane-icons"), shown);
     else if (this.view === "tree") this.renderTree();
@@ -312,6 +332,66 @@ export class FileExplorer {
     this.expanded.add(entry.path);
     this.render();
     this.status(`Opened ${entry.path}`);
+  }
+
+  toggleChanges() {
+    this.changesMode = !this.changesMode;
+    this.render();
+    if (this.changesMode) return this.run((ctx) => this.loadChanges(ctx));
+  }
+
+  async loadChanges(ctx) {
+    const changes = await api("GET", `/sandboxes/${encodeURIComponent(ctx.id)}/changes`, undefined, { signal: ctx.signal });
+    if (!this.current(ctx)) return;
+    this.changes = changes;
+    this.render();
+    // The count line already carries the numbers, and they are the filtered
+    // ones; a second, larger total beside it only reads as a contradiction.
+    this.status("Read what this sandbox changed.");
+  }
+
+  // What the workload did, newest idea first: the daemon's own seeded files
+  // are hidden unless asked for, because they are in every sandbox.
+  renderChanges() {
+    const body = this.$("files-changes-list");
+    const includeSeeded = this.$("files-changes-seeded").checked;
+    const all = this.changes?.entries || [];
+    const entries = all.filter((entry) => includeSeeded || !entry.seeded);
+    const hidden = all.length - entries.length;
+    body.replaceChildren(...entries.slice(0, LIMIT).map((entry) => this.changeRow(entry)));
+
+    const notes = [];
+    if (all.length === 0 && this.changes) notes.push("Nothing in this sandbox has been changed yet.");
+    if (hidden > 0) notes.push(`${hidden} file${hidden === 1 ? "" : "s"} the daemon writes into every sandbox hidden.`);
+    if (this.changes?.truncated) notes.push("This sandbox changed more paths than the daemon will list.");
+    this.$("files-changes-note").textContent = notes.join(" ");
+    this.$("files-count").textContent = `${entries.length} change${entries.length === 1 ? "" : "s"}`;
+  }
+
+  changeRow(entry) {
+    const openable = entry.kind !== "deleted" && ["file", "symlink"].includes(entry.type);
+    const open = this.make("button", {
+      class: "files-change-path",
+      type: "button",
+      // Only openable rows take part in the busy/stopped sweep; a row with
+      // nothing to open stays disabled, and that sweep would re-enable it.
+      "data-file-action": openable ? "" : null,
+      disabled: openable ? null : "",
+      title: openable ? entry.path : "This path cannot be opened",
+      onclick: () => void this.run((ctx) => (entry.type === "dir" ? this.list(entry.path, ctx) : this.select({
+        path: entry.path,
+        name: entry.path.split("/").at(-1),
+        type: entry.type,
+        size: entry.size,
+        mode: entry.mode,
+      }, ctx))),
+    }, this.icon({ type: entry.type || "file" }), this.make("span", {}, entry.path));
+    const row = this.make("tr", {}, this.make("td", {}, open));
+    row.append(this.make("td", {}, this.make("span", { class: "files-change-kind", "data-kind": entry.kind }, entry.kind),
+      entry.seeded ? this.make("span", { class: "files-change-seeded" }, " · daemon") : null));
+    row.append(this.make("td", {}, entry.kind === "deleted" ? "" : formatSize({ type: entry.type, size: entry.size })));
+    row.append(this.make("td", {}, formatDate(entry.modified_at)));
+    return row;
   }
 
   renderTiles(container, entries) {

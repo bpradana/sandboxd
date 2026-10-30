@@ -182,7 +182,7 @@ details.panel[open] > summary { margin-bottom: 10px; }
 
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; text-transform: lowercase; }
 .badge.running, .badge.ready { color: var(--ok); }
-.badge.creating, .badge.stopping, .badge.snapshotting, .badge.capturing, .badge.uploading, .badge.restoring { color: var(--warn); }
+.badge.creating, .badge.stopping, .badge.snapshotting, .badge.capturing, .badge.uploading, .badge.restoring, .badge.promoting { color: var(--warn); }
 .badge.failed { color: var(--danger); }
 .badge.stopped { color: var(--muted); }
 
@@ -392,6 +392,22 @@ dialog p { font-size: 13px; margin: 0 0 12px; }
 .files-views > [hidden] { display: none; }
 .files-table-wrap, .files-grid, .files-columns, .files-gallery { flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 6px; }
 .files-table-wrap, .files-grid { overflow: auto; }
+
+/* Changes: not a view of a folder but of the sandbox, so it replaces the
+   whole browser pane and takes the view switch away while it is up. */
+.files-changes { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.files-changes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.files-changes-head .checkbox { flex-direction: row; align-items: center; gap: 6px; white-space: nowrap; }
+.files-changes-head .checkbox input { width: auto; }
+.files-change-kind { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.files-change-kind[data-kind="added"] { color: var(--ok); }
+.files-change-kind[data-kind="deleted"] { color: var(--danger); }
+.files-change-kind[data-kind="modified"], .files-change-kind[data-kind="replaced"] { color: var(--warn); }
+.files-change-path { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.files-change-path:hover:not(:disabled) { color: var(--accent); }
+.files-change-path:disabled { cursor: default; color: var(--muted); }
+.files-change-path span { overflow-wrap: anywhere; }
+.files-change-seeded { color: var(--muted); }
 
 /* Tree view: the list view, nested, with folders that open in place. It
    carries two more columns than the list, so it gets more of the dialog. */

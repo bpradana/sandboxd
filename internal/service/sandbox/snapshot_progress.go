@@ -22,6 +22,9 @@ const (
 
 	operationBackup  = "backup"
 	operationRestore = "restore"
+	// operationPromote downloads an archive and imports it as a base image,
+	// so it runs a restore's two phases without building a sandbox.
+	operationPromote = "promote"
 )
 
 // snapshotProgress is how far one running job has got. It lives in memory

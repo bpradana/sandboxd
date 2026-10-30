@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bpradana/sandboxd/internal/engine/image"
 	"github.com/bpradana/sandboxd/internal/model"
 )
 
@@ -22,6 +23,8 @@ var (
 	ErrNotReady            = errors.New("sandbox engine is not ready")
 	ErrSandboxNotFound     = errors.New("sandbox not found")
 	ErrImageNotFound       = errors.New("image not found")
+	ErrImageExists         = errors.New("image already exists")
+	ErrInvalidImageName    = errors.New("invalid image name")
 	ErrSessionNotFound     = errors.New("session not found")
 	ErrSessionBusy         = errors.New("session is busy")
 	ErrSessionClosed       = errors.New("session is closed")
@@ -154,6 +157,44 @@ type FileInfo struct {
 	LinkTarget string
 }
 
+// Change kinds. A sandbox's writable overlay layer records what its workload
+// did to the image beneath it, and these are the four things it can say.
+const (
+	// ChangeAdded is a path the image did not have.
+	ChangeAdded = "added"
+	// ChangeModified is a path copied up from the image and then written to.
+	ChangeModified = "modified"
+	// ChangeDeleted is a path the image had and the sandbox removed.
+	ChangeDeleted = "deleted"
+	// ChangeReplaced is a directory emptied of everything the image put in
+	// it, so none of the image's entries show through any more.
+	ChangeReplaced = "replaced"
+)
+
+// Change is one filesystem entry the sandbox's workload created, wrote to, or
+// removed since it started. Size, Mode and ModTime are unset for a deletion,
+// which leaves nothing behind to describe.
+type Change struct {
+	Path    string
+	Kind    string
+	Type    string
+	Size    int64
+	Mode    os.FileMode
+	ModTime time.Time
+	// Seeded marks a path the daemon writes into every sandbox (its hostname,
+	// hosts and resolv.conf, the sandbox account, and the directories mounts
+	// go on). It says the daemon writes there, not that the workload did not.
+	Seeded bool
+}
+
+// ChangeSet is a sandbox's whole change list, or as much of it as the engine
+// is willing to walk: a workload that installs a large package tree can
+// produce far more entries than anyone wants to read.
+type ChangeSet struct {
+	Entries   []Change
+	Truncated bool
+}
+
 type Stats struct {
 	MemoryBytes       int64
 	MemoryPeakBytes   int64
@@ -170,6 +211,10 @@ type Image struct {
 	Name      string
 	CreatedAt time.Time
 }
+
+// ValidImageName reports whether name can be a base image, so a caller can be
+// refused before an archive is downloaded on its behalf.
+func ValidImageName(name string) bool { return image.ValidName(name) }
 
 // ListeningPort is a TCP socket accepting connections inside a sandbox.
 // Loopback and Unspecified say whether DialSandbox can reach it: it dials
@@ -203,6 +248,9 @@ type Engine interface {
 	Exits() <-chan Exit
 
 	Images(ctx context.Context) ([]Image, error)
+	// ImportImage adds a base image from a root filesystem archive, refusing
+	// to expand more than maxBytes so a small archive cannot fill the host.
+	ImportImage(ctx context.Context, name string, src io.Reader, maxBytes int64) (*Image, error)
 
 	Create(ctx context.Context, spec Spec) (*Info, error)
 	Destroy(ctx context.Context, id string) error
@@ -216,6 +264,9 @@ type Engine interface {
 	// network namespace, lowest port first.
 	ListeningPorts(ctx context.Context, id string) ([]ListeningPort, error)
 	Stats(ctx context.Context, id string) (*Stats, error)
+	// Changes reports what the workload did to the filesystem it was given,
+	// read from the overlay's writable layer rather than by comparing trees.
+	Changes(ctx context.Context, id string) (*ChangeSet, error)
 
 	Exec(ctx context.Context, id string, req ExecRequest, out OutputFunc) (*ExecResult, error)
 	OpenSession(ctx context.Context, id, sessionID string, req SessionRequest) error

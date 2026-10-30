@@ -354,16 +354,20 @@ function renderSnapshot(item) {
   const ready = item.status === "ready";
   const finished = ready || item.status === "failed";
   const restoring = item.progress?.operation === "restore";
+  const promoting = item.progress?.operation === "promote";
+  const busy = restoring || promoting;
+  const label = restoring ? "restoring" : promoting ? "promoting" : item.status;
   return el("li", { class: "sandbox" },
     el("div", { class: "sandbox-top" },
       el("span", { class: "sandbox-id", title: item.id }, shortID(item.id)),
-      el("span", { class: `badge ${restoring ? "restoring" : item.status}` }, restoring ? "restoring" : item.status)),
+      el("span", { class: `badge ${label}` }, label)),
     el("div", { class: "sandbox-meta" },
       [shortID(item.sandbox_id), item.architecture, item.size_bytes ? formatBytes(item.size_bytes) : "", new Date(item.created_at).toLocaleString()].filter(Boolean).join(" · ")),
     item.progress ? snapshotProgress(item.progress) : null,
     item.failure_reason ? el("div", { class: "sandbox-meta" }, item.failure_reason) : null,
     el("div", { class: "actions" },
-      ready ? el("button", { class: "btn small primary", type: "button", disabled: restoring ? "" : null, onclick: (event) => restoreSnapshot(item.id, event.currentTarget) }, restoring ? "Restoring…" : "Restore") : null,
+      ready ? el("button", { class: "btn small primary", type: "button", disabled: busy ? "" : null, onclick: (event) => restoreSnapshot(item.id, event.currentTarget) }, restoring ? "Restoring…" : "Restore") : null,
+      ready ? el("button", { class: "btn small", type: "button", disabled: busy ? "" : null, title: "Import these files as a base image, so new sandboxes start from them", onclick: (event) => promoteSnapshot(item.id, event.currentTarget) }, promoting ? "Importing…" : "Use as image") : null,
       finished ? el("button", { class: "btn small danger", type: "button", disabled: item.progress ? "" : null, onclick: (event) => deleteSnapshot(item.id, event.currentTarget) }, "Delete backup") : null));
 }
 
@@ -390,6 +394,25 @@ async function restoreSnapshot(id, button) {
   finally {
     button.disabled = false;
     button.textContent = "Restore";
+    await refreshSnapshots(true);
+  }
+}
+
+// promoteSnapshot turns a backup into a base image, so whatever this sandbox
+// had installed becomes the starting point of the next one at no cost.
+async function promoteSnapshot(id, button) {
+  const name = window.prompt("Name the base image. New sandboxes can then be created from it.\n\nLowercase letters, digits, dot, dash and underscore.", "");
+  if (name === null) return;
+  button.disabled = true;
+  button.textContent = "Importing…";
+  try {
+    const image = await api("POST", `/snapshots/${encodeURIComponent(id)}/image`, { image: name.trim() });
+    toast(`Image ${image.name} is ready to create sandboxes from.`);
+    await loadImages();
+  } catch (err) { toast(`Import failed: ${err.message}`, "error"); }
+  finally {
+    button.disabled = false;
+    button.textContent = "Use as image";
     await refreshSnapshots(true);
   }
 }

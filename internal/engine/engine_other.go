@@ -44,6 +44,10 @@ func (u *unsupported) Images(context.Context) ([]Image, error) {
 	return nil, ErrUnsupportedPlatform
 }
 
+func (u *unsupported) ImportImage(context.Context, string, io.Reader, int64) (*Image, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
 func (u *unsupported) Create(context.Context, Spec) (*Info, error) {
 	return nil, ErrUnsupportedPlatform
 }
@@ -63,6 +67,10 @@ func (u *unsupported) DialSandbox(context.Context, string, int) (net.Conn, error
 }
 
 func (u *unsupported) ListeningPorts(context.Context, string) ([]ListeningPort, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
+func (u *unsupported) Changes(context.Context, string) (*ChangeSet, error) {
 	return nil, ErrUnsupportedPlatform
 }
 

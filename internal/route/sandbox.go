@@ -13,6 +13,7 @@ func registerSandboxRoutes(params Params, api fiber.Router) {
 	api.Get("/snapshots/progress", h.ListSnapshotJobs)
 	api.Get("/snapshots/:id", h.GetSnapshot)
 	api.Delete("/snapshots/:id", h.DeleteSnapshot)
+	api.Post("/snapshots/:id/image", h.PromoteSnapshot)
 	api.Get("/settings/cloud-storage", h.GetCloudStorage)
 	api.Post("/settings/cloud-storage/test", h.TestCloudStorage)
 	api.Put("/settings/cloud-storage", h.SaveCloudStorage)
@@ -30,6 +31,7 @@ func registerSandboxRoutes(params Params, api fiber.Router) {
 	sandboxes.Post("/:id/previews", h.CreatePreview)
 	sandboxes.Delete("/:id/previews", h.RevokePreview)
 	sandboxes.Get("/:id/ports", h.ListPorts)
+	sandboxes.Get("/:id/changes", h.GetSandboxChanges)
 
 	sandboxes.Post("/:id/exec", h.ExecCommand)
 	sandboxes.Post("/:id/exec/stream", h.ExecCommandStream)
