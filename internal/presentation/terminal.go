@@ -15,6 +15,10 @@ type TerminalRequest struct {
 	Rows uint16 `query:"rows" validate:"omitempty,min=1,max=1000" example:"40"`
 	// Shell is the login shell; bash falls back to sh when absent.
 	Shell string `query:"shell" validate:"omitempty,oneof=sh bash" example:"bash"`
+	// Command runs on the pseudo-terminal instead of an interactive shell,
+	// as "<shell> -lc <command>". The terminal ends when the command exits,
+	// and Ctrl-C reaches it like any foreground job.
+	Command string `query:"command" validate:"omitempty,max=4096" example:"npm run dev"`
 	// User runs the shell as root or the sandbox user; defaults to
 	// SANDBOX_DEFAULT_USER.
 	User string `query:"user" validate:"omitempty,oneof=root sandbox" example:"root"`

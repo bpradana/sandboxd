@@ -36,6 +36,7 @@ func (s *S3Store) downloadParallel(ctx context.Context, m Manifest, dst randomAc
 	if aws.ToInt64(object.ContentLength) != m.SizeBytes {
 		return ErrCorrupt
 	}
+	written := newTransfer(ctx)
 	group, partCtx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
 	count := (m.SizeBytes + uploadPartSize - 1) / uploadPartSize
@@ -46,7 +47,7 @@ func (s *S3Store) downloadParallel(ctx context.Context, m Manifest, dst randomAc
 			}
 			offset := i * uploadPartSize
 			length := min(uploadPartSize, m.SizeBytes-offset)
-			return s.downloadRange(partCtx, m, aws.ToString(object.ETag), dst, base, offset, length)
+			return s.downloadRange(partCtx, m, aws.ToString(object.ETag), dst, base, offset, length, written, int(i))
 		})
 	}
 	if err := group.Wait(); err != nil {
@@ -66,7 +67,7 @@ func (s *S3Store) downloadParallel(ctx context.Context, m Manifest, dst randomAc
 	return err
 }
 
-func (s *S3Store) downloadRange(ctx context.Context, m Manifest, etag string, dst io.WriterAt, base, offset, length int64) error {
+func (s *S3Store) downloadRange(ctx context.Context, m Manifest, etag string, dst io.WriterAt, base, offset, length int64, progress *transfer, index int) error {
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket), Key: aws.String(s.key(m.ID, ".tar.gz")), IfMatch: aws.String(etag),
 		Range: aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+length-1)),
@@ -82,9 +83,13 @@ func (s *S3Store) downloadRange(ctx context.Context, m Manifest, etag string, ds
 	// A server that ignores Range must never write across another worker's
 	// section. Read one extra byte, but reject it before writing outside it.
 	writer := &LimitedWriter{Writer: io.NewOffsetWriter(dst, base+offset), Remaining: length}
-	n, err := io.Copy(writer, io.LimitReader(ContextReader{Ctx: ctx, Reader: result.Body}, length+1))
+	counted := progress.writer(index, writer)
+	n, err := io.Copy(counted, io.LimitReader(ContextReader{Ctx: ctx, Reader: result.Body}, length+1))
 	if errors.Is(err, ErrTooLarge) || err == nil && n != length {
 		return ErrCorrupt
+	}
+	if part, ok := counted.(*partWriter); ok && err == nil {
+		part.flush()
 	}
 	return err
 }

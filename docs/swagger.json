@@ -1300,7 +1300,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upgrades to a WebSocket attached to a login shell on a pseudo-terminal inside the sandbox: a new one, or with terminal_id a running one (recent output is replayed). Binary messages carry raw terminal input (client to server) and output (server to client). Text messages carry JSON control messages: the server first sends {\"type\":\"attached\",\"terminal_id\":\"...\"}; the client sends {\"type\":\"resize\",\"cols\":N,\"rows\":N} and {\"type\":\"close\"} to end the terminal; the server sends {\"type\":\"exit\",\"exit_code\":N} or {\"type\":\"error\",\"error\":\"...\"} before closing. Closing the socket without \"close\" detaches: the shell keeps running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer attachment takes over from an older one. Authenticate with a bearer key or with a ticket from POST /terminal/tickets; browser Origins must be this server or an allowed CORS origin. While attached, the terminal keeps the sandbox from going idle.",
+                "description": "Upgrades to a WebSocket attached to a login shell on a pseudo-terminal inside the sandbox: a new one, or with terminal_id a running one (recent output is replayed). With command, the shell runs that command line instead of an interactive session, so the terminal is a live process log that still takes Ctrl-C and resizes, and ends with the command. Binary messages carry raw terminal input (client to server) and output (server to client). Text messages carry JSON control messages: the server first sends {\"type\":\"attached\",\"terminal_id\":\"...\"}; the client sends {\"type\":\"resize\",\"cols\":N,\"rows\":N} and {\"type\":\"close\"} to end the terminal; the server sends {\"type\":\"exit\",\"exit_code\":N} or {\"type\":\"error\",\"error\":\"...\"} before closing. Closing the socket without \"close\" detaches: the shell keeps running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer attachment takes over from an older one. Authenticate with a bearer key or with a ticket from POST /terminal/tickets; browser Origins must be this server or an allowed CORS origin. While attached, the terminal keeps the sandbox from going idle.",
                 "tags": [
                     "terminal"
                 ],
@@ -1349,6 +1349,12 @@
                         "type": "string",
                         "description": "Login shell; bash falls back to sh when absent.",
                         "name": "shell",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Run this command line on the terminal instead of an interactive shell.",
+                        "name": "command",
                         "in": "query"
                     },
                     {
@@ -1844,6 +1850,58 @@
                 }
             }
         },
+        "/sandboxes/{id}/ports": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reports every TCP socket accepting connections inside the sandbox's network namespace, so a client can find a development server without being told its port. Ports not bound to loopback or the unspecified address are listed with previewable false: a preview reaches the sandbox over loopback only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "previews"
+                ],
+                "summary": "List the sandbox's listening TCP ports",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ListeningPortsEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/sandboxes/{id}/previews": {
             "post": {
                 "security": [
@@ -2042,6 +2100,37 @@
                     }
                 }
             }
+        },
+        "/snapshots/progress": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reports the progress of every backup and restore running on this host, read from memory alone. Listing snapshots fetches each manifest from cloud storage and is far too expensive to poll at the rate a progress bar wants; this is not. Jobs disappear from the list when they finish, and a host restart leaves none behind.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "List running backups and restores",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SnapshotJobsEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -2129,6 +2218,10 @@
                 "region"
             ],
             "properties": {
+                "accelerate": {
+                    "description": "Accelerate uses S3 Transfer Acceleration, which must also be enabled on\nthe bucket itself. AWS S3 only, and it is billed per gigabyte.",
+                    "type": "boolean"
+                },
                 "access_key_id": {
                     "type": "string",
                     "maxLength": 256
@@ -2176,6 +2269,9 @@
         "presentation.CloudStorageResponse": {
             "type": "object",
             "properties": {
+                "accelerate": {
+                    "type": "boolean"
+                },
                 "auth_mode": {
                     "type": "string"
                 },
@@ -2692,6 +2788,52 @@
                 }
             }
         },
+        "presentation.ListeningPortResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "description": "Address is the address the socket is bound to, as the sandbox sees it.",
+                    "type": "string",
+                    "example": "0.0.0.0"
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "previewable": {
+                    "description": "Previewable reports whether a preview can reach this port. Previews\nconnect over the sandbox's loopback interface, so a server bound to\nanother address is listed but cannot be previewed until it also\nlistens on 127.0.0.1 or 0.0.0.0.",
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "presentation.ListeningPortsEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.ListeningPortResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
         "presentation.MkdirRequest": {
             "type": "object",
             "required": [
@@ -3120,6 +3262,45 @@
                 }
             }
         },
+        "presentation.SnapshotJobResponse": {
+            "type": "object",
+            "properties": {
+                "progress": {
+                    "$ref": "#/definitions/presentation.SnapshotProgressResponse"
+                },
+                "snapshot_id": {
+                    "type": "string",
+                    "example": "snap-4f1c2a9b8e7d6c5b4a3f2e1d"
+                }
+            }
+        },
+        "presentation.SnapshotJobsEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.SnapshotJobResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
         "presentation.SnapshotListEnvelopeDoc": {
             "type": "object",
             "properties": {
@@ -3147,6 +3328,31 @@
                 }
             }
         },
+        "presentation.SnapshotProgressResponse": {
+            "type": "object",
+            "properties": {
+                "bytes_done": {
+                    "description": "BytesDone counts archive bytes finished in this phase.",
+                    "type": "integer",
+                    "example": 50331648
+                },
+                "bytes_total": {
+                    "description": "BytesTotal is the archive size, or 0 while capture is still deciding it.",
+                    "type": "integer",
+                    "example": 202375168
+                },
+                "operation": {
+                    "description": "Operation is backup or restore.",
+                    "type": "string",
+                    "example": "backup"
+                },
+                "phase": {
+                    "description": "Phase is capturing, uploading or verifying for a backup, and\ndownloading or importing for a restore.",
+                    "type": "string",
+                    "example": "uploading"
+                }
+            }
+        },
         "presentation.SnapshotResponse": {
             "type": "object",
             "properties": {
@@ -3170,6 +3376,14 @@
                 },
                 "mode": {
                     "type": "string"
+                },
+                "progress": {
+                    "description": "Progress is present only while a backup or restore of this snapshot is\nrunning on this host. It is live state, not part of the stored manifest.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.SnapshotProgressResponse"
+                        }
+                    ]
                 },
                 "sandbox_id": {
                     "type": "string"

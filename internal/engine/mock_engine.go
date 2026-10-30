@@ -188,6 +188,21 @@ func (mr *MockEngineMockRecorder) ListDir(ctx, id, path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDir", reflect.TypeOf((*MockEngine)(nil).ListDir), ctx, id, path)
 }
 
+// ListeningPorts mocks base method.
+func (m *MockEngine) ListeningPorts(ctx context.Context, id string) ([]ListeningPort, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListeningPorts", ctx, id)
+	ret0, _ := ret[0].([]ListeningPort)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListeningPorts indicates an expected call of ListeningPorts.
+func (mr *MockEngineMockRecorder) ListeningPorts(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListeningPorts", reflect.TypeOf((*MockEngine)(nil).ListeningPorts), ctx, id)
+}
+
 // Mkdir mocks base method.
 func (m *MockEngine) Mkdir(ctx context.Context, id, path string, mode os.FileMode, parents bool) (*FileInfo, error) {
 	m.ctrl.T.Helper()

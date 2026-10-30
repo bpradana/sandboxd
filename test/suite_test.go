@@ -19,5 +19,6 @@ func TestSandboxdHTTPE2E(t *testing.T) {
 	t.Run("files", suite.runFilesCase)
 	t.Run("streaming", suite.runStreamCase)
 	t.Run("terminal", suite.runTerminalCase)
+	t.Run("run tabs", suite.runRunCase)
 	t.Run("lifecycle", suite.runLifecycleCase)
 }

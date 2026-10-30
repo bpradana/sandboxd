@@ -57,6 +57,11 @@ definitions:
     type: object
   presentation.CloudStorageRequest:
     properties:
+      accelerate:
+        description: |-
+          Accelerate uses S3 Transfer Acceleration, which must also be enabled on
+          the bucket itself. AWS S3 only, and it is billed per gigabyte.
+        type: boolean
       access_key_id:
         maxLength: 256
         type: string
@@ -96,6 +101,8 @@ definitions:
     type: object
   presentation.CloudStorageResponse:
     properties:
+      accelerate:
+        type: boolean
       auth_mode:
         type: string
       bucket:
@@ -491,6 +498,45 @@ definitions:
         example: 512
         type: integer
     type: object
+  presentation.ListeningPortResponse:
+    properties:
+      address:
+        description: Address is the address the socket is bound to, as the sandbox
+          sees it.
+        example: 0.0.0.0
+        type: string
+      port:
+        example: 3000
+        type: integer
+      previewable:
+        description: |-
+          Previewable reports whether a preview can reach this port. Previews
+          connect over the sandbox's loopback interface, so a server bound to
+          another address is listed but cannot be previewed until it also
+          listens on 127.0.0.1 or 0.0.0.0.
+        example: true
+        type: boolean
+    type: object
+  presentation.ListeningPortsEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.ListeningPortResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
   presentation.MkdirRequest:
     properties:
       mode:
@@ -793,6 +839,34 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.SnapshotJobResponse:
+    properties:
+      progress:
+        $ref: '#/definitions/presentation.SnapshotProgressResponse'
+      snapshot_id:
+        example: snap-4f1c2a9b8e7d6c5b4a3f2e1d
+        type: string
+    type: object
+  presentation.SnapshotJobsEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.SnapshotJobResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
   presentation.SnapshotListEnvelopeDoc:
     properties:
       code:
@@ -813,6 +887,28 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.SnapshotProgressResponse:
+    properties:
+      bytes_done:
+        description: BytesDone counts archive bytes finished in this phase.
+        example: 50331648
+        type: integer
+      bytes_total:
+        description: BytesTotal is the archive size, or 0 while capture is still deciding
+          it.
+        example: 202375168
+        type: integer
+      operation:
+        description: Operation is backup or restore.
+        example: backup
+        type: string
+      phase:
+        description: |-
+          Phase is capturing, uploading or verifying for a backup, and
+          downloading or importing for a restore.
+        example: uploading
+        type: string
+    type: object
   presentation.SnapshotResponse:
     properties:
       architecture:
@@ -829,6 +925,12 @@ definitions:
         type: object
       mode:
         type: string
+      progress:
+        allOf:
+        - $ref: '#/definitions/presentation.SnapshotProgressResponse'
+        description: |-
+          Progress is present only while a backup or restore of this snapshot is
+          running on this host. It is live state, not part of the stored manifest.
       sandbox_id:
         type: string
       sha256:
@@ -1790,11 +1892,13 @@ paths:
     get:
       description: 'Upgrades to a WebSocket attached to a login shell on a pseudo-terminal
         inside the sandbox: a new one, or with terminal_id a running one (recent output
-        is replayed). Binary messages carry raw terminal input (client to server)
-        and output (server to client). Text messages carry JSON control messages:
-        the server first sends {"type":"attached","terminal_id":"..."}; the client
-        sends {"type":"resize","cols":N,"rows":N} and {"type":"close"} to end the
-        terminal; the server sends {"type":"exit","exit_code":N} or {"type":"error","error":"..."}
+        is replayed). With command, the shell runs that command line instead of an
+        interactive session, so the terminal is a live process log that still takes
+        Ctrl-C and resizes, and ends with the command. Binary messages carry raw terminal
+        input (client to server) and output (server to client). Text messages carry
+        JSON control messages: the server first sends {"type":"attached","terminal_id":"..."};
+        the client sends {"type":"resize","cols":N,"rows":N} and {"type":"close"}
+        to end the terminal; the server sends {"type":"exit","exit_code":N} or {"type":"error","error":"..."}
         before closing. Closing the socket without "close" detaches: the shell keeps
         running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer
         attachment takes over from an older one. Authenticate with a bearer key or
@@ -1833,6 +1937,11 @@ paths:
         - bash
         in: query
         name: shell
+        type: string
+      - description: Run this command line on the terminal instead of an interactive
+          shell.
+        in: query
+        name: command
         type: string
       - description: Initial working directory.
         in: query
@@ -2158,6 +2267,43 @@ paths:
       summary: Readiness probe
       tags:
       - health
+  /sandboxes/{id}/ports:
+    get:
+      description: 'Reports every TCP socket accepting connections inside the sandbox''s
+        network namespace, so a client can find a development server without being
+        told its port. Ports not bound to loopback or the unspecified address are
+        listed with previewable false: a preview reaches the sandbox over loopback
+        only.'
+      parameters:
+      - description: Sandbox ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.ListeningPortsEnvelopeDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List the sandbox's listening TCP ports
+      tags:
+      - previews
   /sandboxes/{id}/previews:
     delete:
       consumes:
@@ -2283,6 +2429,29 @@ paths:
       security:
       - BearerAuth: []
       summary: Configure scheduled and pre-expiry backups
+      tags:
+      - snapshots
+  /snapshots/progress:
+    get:
+      description: Reports the progress of every backup and restore running on this
+        host, read from memory alone. Listing snapshots fetches each manifest from
+        cloud storage and is far too expensive to poll at the rate a progress bar
+        wants; this is not. Jobs disappear from the list when they finish, and a host
+        restart leaves none behind.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.SnapshotJobsEnvelopeDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List running backups and restores
       tags:
       - snapshots
 schemes:

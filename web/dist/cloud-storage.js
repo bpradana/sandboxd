@@ -43,6 +43,7 @@ export function setupCloudStorage({ toast, onChange }) {
     $("#cloud-endpoint").value = value.endpoint || "";
     $("#cloud-prefix").value = value.prefix ?? "sandboxd/snapshots";
     $("#cloud-path-style").checked = !!value.path_style;
+    $("#cloud-accelerate").checked = !!value.accelerate;
     $("#cloud-connection-status").textContent = value.connected
       ? `Connected to ${value.bucket}${value.source === "environment" ? " using server configuration" : ""}.`
       : "No cloud storage connected.";
@@ -67,6 +68,7 @@ export function setupCloudStorage({ toast, onChange }) {
       endpoint: $("#cloud-endpoint").value.trim(),
       prefix: $("#cloud-prefix").value.trim(),
       path_style: $("#cloud-path-style").checked,
+      accelerate: $("#cloud-accelerate").checked,
     };
     if (body.auth_mode === "access_keys") {
       body.access_key_id = $("#cloud-access-key").value;

@@ -75,27 +75,14 @@
     </aside>
 
     <section class="workspace">
-      <div class="terminal-workspace">
       <nav id="tabs" class="tabs" role="tablist"></nav>
       <div id="panes" class="panes">
         <div id="workspace-empty" class="workspace-empty">
           <p>Open a terminal from a sandbox to start working.</p>
           <p class="muted">Each terminal is a login shell on a real PTY, so full-screen programs, Ctrl-C and resizing all work.</p>
+          <p class="muted">Run opens a tab that runs one command and shows the app it serves beside its log.</p>
         </div>
       </div>
-      </div>
-      <section id="app-preview-panel" class="preview-panel" aria-label="App preview" hidden>
-        <div class="preview-heading"><h2>App preview</h2><button id="preview-close" class="btn small" type="button">Close</button></div>
-        <p id="preview-sandbox" class="muted"></p>
-        <form id="preview-form" class="preview-controls">
-          <label>Port<input id="preview-port" type="number" min="1" max="65535" value="3000" required></label>
-          <button id="preview-connect" class="btn small primary" type="submit">Open</button>
-          <button id="preview-refresh" class="btn small" type="button" disabled>Refresh</button>
-          <a id="preview-external" class="btn small" target="_blank" rel="noopener noreferrer" hidden>New tab ↗</a>
-        </form>
-        <p id="preview-status" class="muted" role="status">Start your app in the terminal, then enter its HTTP port.</p>
-        <iframe id="preview-frame" title="Sandbox application preview" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
-      </section>
     </section>
   </main>
 
@@ -203,6 +190,8 @@
           <label>Endpoint <small>Leave empty for AWS S3</small><input id="cloud-endpoint" type="url" maxlength="2048" spellcheck="false" placeholder="https://your-storage-provider.example"></label>
           <label>Backup prefix<input id="cloud-prefix" type="text" maxlength="1024" spellcheck="false" placeholder="sandboxd/snapshots"></label>
           <label class="checkbox"><input id="cloud-path-style" type="checkbox">Use path-style bucket URLs</label>
+          <label class="checkbox"><input id="cloud-accelerate" type="checkbox">Use S3 Transfer Acceleration</label>
+          <p id="cloud-accelerate-help" class="muted">Routes transfers through the nearest CloudFront edge and over AWS's backbone. Worth its per-GB charge when the bucket is far from this daemon. Enable it on the bucket in AWS first; AWS S3 only.</p>
         </fieldset>
         <div class="dialog-actions">
           <button id="cloud-disconnect" class="btn danger" type="button" disabled>Disconnect</button>

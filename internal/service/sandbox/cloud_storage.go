@@ -45,7 +45,7 @@ func (s *service) cloudStorageResponse() *presentation.CloudStorageResponse {
 	}
 	return &presentation.CloudStorageResponse{
 		Connected: s.snapshots != nil, Source: s.cloudSource,
-		AuthMode: c.AuthMode, Bucket: c.Bucket, Region: c.Region, Endpoint: c.Endpoint, Prefix: c.Prefix, PathStyle: c.PathStyle,
+		AuthMode: c.AuthMode, Bucket: c.Bucket, Region: c.Region, Endpoint: c.Endpoint, Prefix: c.Prefix, PathStyle: c.PathStyle, Accelerate: c.Accelerate,
 		HasSavedCredentials: s.cloudSource == "saved" && c.AuthMode == snapshot.AuthAccessKeys && c.SecretAccessKey != "", UpdatedAt: s.cloudUpdatedAt,
 	}
 }
@@ -62,7 +62,7 @@ func (s *service) resolveCloudConnection(req presentation.CloudStorageRequest) (
 	}
 	c := snapshot.Connection{
 		AuthMode: req.AuthMode, Bucket: strings.TrimSpace(req.Bucket), Region: strings.TrimSpace(req.Region),
-		Endpoint: strings.TrimSpace(req.Endpoint), Prefix: strings.Trim(strings.TrimSpace(req.Prefix), "/"), PathStyle: req.PathStyle,
+		Endpoint: strings.TrimSpace(req.Endpoint), Prefix: strings.Trim(strings.TrimSpace(req.Prefix), "/"), PathStyle: req.PathStyle, Accelerate: req.Accelerate,
 		AccessKeyID: req.AccessKeyID, SecretAccessKey: req.SecretAccessKey, SessionToken: req.SessionToken,
 	}
 	if req.UseSavedCredentials {

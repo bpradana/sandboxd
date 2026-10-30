@@ -34,7 +34,7 @@ const (
 
 // OpenTerminal godoc
 // @Summary Open an interactive terminal
-// @Description Upgrades to a WebSocket attached to a login shell on a pseudo-terminal inside the sandbox: a new one, or with terminal_id a running one (recent output is replayed). Binary messages carry raw terminal input (client to server) and output (server to client). Text messages carry JSON control messages: the server first sends {"type":"attached","terminal_id":"..."}; the client sends {"type":"resize","cols":N,"rows":N} and {"type":"close"} to end the terminal; the server sends {"type":"exit","exit_code":N} or {"type":"error","error":"..."} before closing. Closing the socket without "close" detaches: the shell keeps running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer attachment takes over from an older one. Authenticate with a bearer key or with a ticket from POST /terminal/tickets; browser Origins must be this server or an allowed CORS origin. While attached, the terminal keeps the sandbox from going idle.
+// @Description Upgrades to a WebSocket attached to a login shell on a pseudo-terminal inside the sandbox: a new one, or with terminal_id a running one (recent output is replayed). With command, the shell runs that command line instead of an interactive session, so the terminal is a live process log that still takes Ctrl-C and resizes, and ends with the command. Binary messages carry raw terminal input (client to server) and output (server to client). Text messages carry JSON control messages: the server first sends {"type":"attached","terminal_id":"..."}; the client sends {"type":"resize","cols":N,"rows":N} and {"type":"close"} to end the terminal; the server sends {"type":"exit","exit_code":N} or {"type":"error","error":"..."} before closing. Closing the socket without "close" detaches: the shell keeps running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer attachment takes over from an older one. Authenticate with a bearer key or with a ticket from POST /terminal/tickets; browser Origins must be this server or an allowed CORS origin. While attached, the terminal keeps the sandbox from going idle.
 // @Tags terminal
 // @Security BearerAuth
 // @Param id path string true "Sandbox ID."
@@ -43,6 +43,7 @@ const (
 // @Param cols query int false "Initial columns." minimum(1) maximum(1000)
 // @Param rows query int false "Initial rows." minimum(1) maximum(1000)
 // @Param shell query string false "Login shell; bash falls back to sh when absent." Enums(sh, bash)
+// @Param command query string false "Run this command line on the terminal instead of an interactive shell."
 // @Param cwd query string false "Initial working directory."
 // @Success 101 {object} presentation.TerminalControlMessage "Switching to the WebSocket protocol."
 // @Failure 400 {object} presentation.ErrorResponseDoc "Validation failed."

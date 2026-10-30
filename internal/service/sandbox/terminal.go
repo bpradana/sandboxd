@@ -47,9 +47,9 @@ func (s *service) RedeemTerminalTicket(id, ticket string) bool {
 // terminalIDPrefix starts every terminal ID.
 const terminalIDPrefix = "term"
 
-// Terminal attaches to a new terminal (a login shell on a pseudo-terminal),
-// or with req.TerminalID to a running one, and relays it until the shell
-// exits or the caller closes input. Closing input detaches: the shell keeps
+// Terminal attaches to a new terminal (a login shell on a pseudo-terminal,
+// or req.Command run by one), or with req.TerminalID to a running one, and
+// relays it until the command exits or the caller closes input. Closing input detaches: the shell keeps
 // running for SANDBOX_TERMINAL_DETACH_TIMEOUT and the result is nil. attached
 // receives the terminal ID before any output. An attached terminal counts as
 // activity, so the idle reaper leaves the sandbox alone; the TTL still
@@ -67,8 +67,15 @@ func (s *service) Terminal(ctx context.Context, id string, req presentation.Term
 	termReq := engine.TerminalRequest{ID: req.TerminalID, Attach: req.TerminalID != "", User: s.user(req.User), Cwd: req.Cwd, Cols: req.Cols, Rows: req.Rows}
 	if !termReq.Attach {
 		termReq.ID = helper.NewID(terminalIDPrefix)
-		if req.Shell == "sh" {
+		// Only an explicit shell is resolved here; otherwise init picks the
+		// best one the image has.
+		switch {
+		case req.Shell == "sh" && req.Command != "":
+			termReq.Argv = []string{"/bin/sh", "-lc", req.Command}
+		case req.Shell == "sh":
 			termReq.Argv = []string{"/bin/sh", "-l"}
+		default:
+			termReq.Command = req.Command
 		}
 	}
 	termReq.Ready = func() error { return attached(termReq.ID) }

@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- S3 Transfer Acceleration for snapshot transfers, as a cloud storage setting
+  and `SNAPSHOT_S3_ACCELERATE`, for daemons far from their bucket.
+- `GET /snapshots/progress`, listing running backups and restores from memory
+  so progress can be polled without a cloud round trip per manifest.
+- Live progress for backups and restores: each snapshot card shows the phase
+  it is in (capturing, uploading, verifying, downloading or importing) and how
+  many bytes of the archive have moved.
+- Run tabs in the web console: a command's live log on a pseudo-terminal beside
+  the app it serves, in the same tab bar as the terminals, restored on reload.
+- `GET /sandboxes/{id}/ports`, listing the TCP sockets listening inside a
+  sandbox, read from its network namespace without running anything in it.
+- A `command` query parameter on the terminal WebSocket, which runs that command
+  line on the pseudo-terminal instead of an interactive shell.
 - A sandbox file explorer with directory browsing, text editing, uploads,
   downloads, file and folder creation, and confirmed deletion.
 - Parallel multipart snapshot uploads with 16 MiB parts, per-part retries and
@@ -16,8 +29,8 @@ All notable changes to this project are documented here. The format follows
   SHA-256 checksum to avoid a redundant download after backup when supported.
 - Scheduled filesystem checkpoints that resume running sessions, automatic
   backups before TTL or idle cleanup, and retention for automatic backups.
-- App previews alongside the terminal, with per-session browser origins,
-  HTTP/WebSocket proxying to sandbox loopback, expiry and revocation.
+- App previews, with per-session browser origins, HTTP/WebSocket proxying to
+  sandbox loopback, expiry and revocation.
 - Cloud filesystem snapshots: save and stop sandboxes to S3-compatible storage,
   then restore their files and configuration into new sandboxes.
 - Cloud storage settings with encrypted access keys or server identity,
@@ -39,5 +52,11 @@ All notable changes to this project are documented here. The format follows
   metadata, and host destinations.
 - Sandbox-scoped `/proc/meminfo` and a read-only `/sys/fs/cgroup`.
 - TTL and idle reaping, crash reconciliation, Prometheus metrics, OpenTelemetry tracing.
+
+### Fixed
+
+- Warnings no longer carry a stack trace. zap's development preset attached one
+  to every warning, burying expected conditions such as an unauthenticated
+  development API under pages of frames.
 
 [Unreleased]: https://github.com/bpradana/sandboxd/commits/main

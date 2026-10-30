@@ -34,8 +34,11 @@ type Service interface {
 	SetSnapshotPolicy(context.Context, string, model.SnapshotPolicy) (*presentation.SandboxResponse, error)
 	CreatePreview(context.Context, string, presentation.CreatePreviewRequest) (*preview.Session, error)
 	RevokePreview(context.Context, string, presentation.RevokePreviewRequest) error
+	ListeningPorts(ctx context.Context, id string) ([]presentation.ListeningPortResponse, error)
 	GetSnapshot(ctx context.Context, id string) (*presentation.SnapshotResponse, error)
 	ListSnapshots(ctx context.Context) ([]presentation.SnapshotResponse, error)
+	// SnapshotJobs lists running backups and restores from memory alone.
+	SnapshotJobs() []presentation.SnapshotJobResponse
 	DeleteSnapshot(ctx context.Context, id string) error
 	GetCloudStorage(ctx context.Context) (*presentation.CloudStorageResponse, error)
 	TestCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) error
@@ -111,6 +114,9 @@ type service struct {
 
 	tickets *ticketStore
 
+	// jobProgress reports how far running backups and restores have got.
+	jobProgress *progressTracker
+
 	// background owns the reaper and exit-watcher goroutines.
 	background sync.WaitGroup
 	stop       chan struct{}
@@ -162,6 +168,8 @@ func newService(
 		now:      time.Now,
 		inFlight: make(map[string]int),
 		tickets:  newTicketStore(),
+
+		jobProgress: newProgressTracker(),
 	}
 }
 

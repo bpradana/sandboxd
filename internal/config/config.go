@@ -38,6 +38,7 @@ type SnapshotConfig struct {
 	Endpoint      string
 	Prefix        string
 	PathStyle     bool
+	Accelerate    bool
 	TempDir       string
 	Timeout       time.Duration
 	MaxBytes      int64
@@ -254,6 +255,7 @@ func Load() (Config, error) {
 			Endpoint:      getEnv("SNAPSHOT_S3_ENDPOINT", ""),
 			Prefix:        getEnv("SNAPSHOT_S3_PREFIX", "sandboxd/snapshots"),
 			PathStyle:     getEnvAsBool("SNAPSHOT_S3_PATH_STYLE", false),
+			Accelerate:    getEnvAsBool("SNAPSHOT_S3_ACCELERATE", false),
 			TempDir:       getEnv("SNAPSHOT_TEMP_DIR", stateDir+"/snapshot-tmp"),
 			Timeout:       getEnvAsDuration("SNAPSHOT_TIMEOUT", 30*time.Minute),
 			MaxBytes:      int64(getEnvAsInt("SNAPSHOT_MAX_BYTES", 4<<30)),

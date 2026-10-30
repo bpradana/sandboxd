@@ -51,6 +51,9 @@ func NewConnectionStore(ctx context.Context, cfg config.SnapshotConfig, connecti
 	}
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.UsePathStyle = connection.PathStyle
+		// Let the SDK build and sign the accelerate endpoint; it is not the
+		// regional host with a different name.
+		o.UseAccelerate = connection.Accelerate
 		if connection.Endpoint != "" {
 			o.BaseEndpoint = aws.String(connection.Endpoint)
 		}
@@ -189,7 +192,12 @@ func (s *S3Store) Upload(ctx context.Context, id string, src io.ReadSeeker, size
 		Body: src, ContentLength: aws.Int64(size), ContentType: aws.String("application/gzip"),
 		ChecksumSHA256: aws.String(base64.StdEncoding.EncodeToString(sum)),
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// A single request either stored the whole archive or did not store it.
+	newTransfer(ctx).set(0, size)
+	return nil
 }
 
 func (s *S3Store) Download(ctx context.Context, m Manifest, dst io.Writer) error {
@@ -212,7 +220,8 @@ func (s *S3Store) downloadSequential(ctx context.Context, m Manifest, dst io.Wri
 	}
 	defer func() { _ = result.Body.Close() }()
 	sum := sha256.New()
-	n, err := io.Copy(io.MultiWriter(dst, sum), io.LimitReader(ContextReader{Ctx: ctx, Reader: result.Body}, m.SizeBytes+1))
+	received := newTransfer(ctx)
+	n, err := io.Copy(io.MultiWriter(received.writer(0, dst), sum), io.LimitReader(ContextReader{Ctx: ctx, Reader: result.Body}, m.SizeBytes+1))
 	if err != nil {
 		return err
 	}

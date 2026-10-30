@@ -1,6 +1,19 @@
 export const EDIT_LIMIT = 1024 * 1024;
 export const DOWNLOAD_LIMIT = 256 * 1024 * 1024;
 
+// formatBytes renders a size the way a person reads it, not a machine.
+export function formatBytes(bytes) {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
 export function cleanPath(path) {
   if (!path.startsWith("/") || path.includes("\0")) throw new Error("Enter an absolute path inside the sandbox.");
   const parts = [];

@@ -1,4 +1,7 @@
 // Interactive terminals: xterm.js bridged to the sandbox PTY over WebSocket.
+// A session is either a shell the user types in, or, with a command, the live
+// log of one process -- the same PTY either way, so Ctrl-C and resizing work
+// in both.
 //
 // Binary frames carry raw terminal bytes in both directions. Text frames are
 // JSON control messages: the server sends {"type":"attached"} first, and
@@ -39,11 +42,15 @@ const THEME = {
 
 export class TerminalSession {
   // terminalID reattaches to a terminal that is still running in the sandbox.
-  constructor(sandboxID, label, pane, { terminalID = null, onStateChange, onAttached }) {
+  // command runs on the terminal instead of an interactive shell; startLabel
+  // names the button that starts the next one.
+  constructor(sandboxID, label, container, { terminalID = null, command = "", startLabel = "New shell", onStateChange, onAttached }) {
     this.sandboxID = sandboxID;
     this.label = label;
-    this.pane = pane;
+    this.container = container;
     this.terminalID = terminalID;
+    this.command = command;
+    this.startLabel = startLabel;
     this.onStateChange = onStateChange;
     this.onAttached = onAttached;
     this.socket = null;
@@ -51,9 +58,11 @@ export class TerminalSession {
     // gone: the sandbox stopped, so nothing can be reattached or started.
     this.gone = false;
     this.autoReattached = false;
+    this.statusText = "";
 
     const host = document.createElement("div");
     host.className = "term";
+    this.host = host;
     this.bar = document.createElement("div");
     this.bar.className = "pane-bar";
     this.status = document.createElement("span");
@@ -65,7 +74,7 @@ export class TerminalSession {
       this.connect();
     });
     this.bar.append(this.status, this.action);
-    pane.append(host, this.bar);
+    container.append(host, this.bar);
 
     this.term = new window.Terminal({
       cursorBlink: true,
@@ -88,7 +97,7 @@ export class TerminalSession {
 
   refit() {
     // A hidden pane has no size; fitting it would collapse the terminal.
-    if (this.pane.offsetParent === null) return;
+    if (this.container.offsetParent === null) return;
     try {
       this.fit.fit();
     } catch {
@@ -121,17 +130,19 @@ export class TerminalSession {
         return;
       }
       this.term.write(`\r\n\x1b[31m[${err.message}]\x1b[0m\r\n`);
-      this.setEnded(true, err.message, attaching ? "Reconnect" : "New shell");
+      this.setEnded(true, err.message, attaching ? "Reconnect" : this.startLabel);
       return;
     }
-    if (attaching) {
-      // The server replays recent output; start from a clean screen.
+    if (attaching || this.command) {
+      // When attaching the server replays recent output, and a new run opens
+      // its own log: either way, start from a clean screen.
       this.term.reset();
     }
 
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     const query = new URLSearchParams({ ticket, cols: this.term.cols, rows: this.term.rows });
     if (attaching) query.set("terminal_id", this.terminalID);
+    else if (this.command) query.set("command", this.command);
     const socket = new WebSocket(`${scheme}://${location.host}/api/v1/sandboxes/${encodeURIComponent(this.sandboxID)}/terminal?${query}`);
     socket.binaryType = "arraybuffer";
     this.socket = socket;
@@ -181,7 +192,7 @@ export class TerminalSession {
         this.setEnded(true, final.error, "Take over");
       } else {
         this.term.write(`\r\n\x1b[31m[${final.error}]\x1b[0m\r\n`);
-        this.setEnded(true, final.error, this.terminalID ? "Reconnect" : "New shell");
+        this.setEnded(true, final.error, this.terminalID ? "Reconnect" : this.startLabel);
       }
       return;
     }
@@ -195,14 +206,14 @@ export class TerminalSession {
       return;
     }
     this.term.write("\r\n\x1b[2m[connection lost]\x1b[0m\r\n");
-    this.setEnded(true, "connection lost; the shell keeps running for a while", this.terminalID ? "Reconnect" : "New shell");
+    this.setEnded(true, "connection lost; the process keeps running for a while", this.terminalID ? "Reconnect" : this.startLabel);
   }
 
   // terminalEnded: the shell is gone; the next connect starts a new one.
   terminalEnded(text) {
     this.terminalID = null;
     this.term.write(`\r\n\x1b[2m[${text}]\x1b[0m\r\n`);
-    this.setEnded(true, text, "New shell");
+    this.setEnded(true, text, this.startLabel);
     this.onAttached?.(this);
   }
 
@@ -221,7 +232,9 @@ export class TerminalSession {
 
   setEnded(ended, text = "", actionLabel = null) {
     this.ended = ended;
-    this.pane.classList.toggle("ended", ended);
+    // statusText is why it ended, for views that show it outside the bar.
+    this.statusText = text;
+    this.container.classList.toggle("ended", ended);
     this.status.textContent = text;
     this.action.hidden = !actionLabel;
     this.action.textContent = actionLabel || "";
@@ -229,6 +242,13 @@ export class TerminalSession {
     if (!ended) return;
     // The pane bar appears below the terminal; keep the grid in view.
     requestAnimationFrame(() => this.refit());
+  }
+
+  // stop ends the running command and keeps its log on screen. The server
+  // kills the process group and reports how it ended.
+  stop() {
+    if (this.ended || !this.socket) return;
+    this.send(JSON.stringify({ type: "close" }));
   }
 
   // dispose closes the tab. With end, the shell is ended too; without, it
@@ -241,5 +261,7 @@ export class TerminalSession {
     socket?.close();
     this.resizeObserver.disconnect();
     this.term.dispose();
+    this.host.remove();
+    this.bar.remove();
   }
 }

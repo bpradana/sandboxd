@@ -9,6 +9,8 @@ func registerSandboxRoutes(params Params, api fiber.Router) {
 
 	api.Get("/images", h.ListImages)
 	api.Get("/snapshots", h.ListSnapshots)
+	// Before the :id route, so "progress" is not read as a snapshot ID.
+	api.Get("/snapshots/progress", h.ListSnapshotJobs)
 	api.Get("/snapshots/:id", h.GetSnapshot)
 	api.Delete("/snapshots/:id", h.DeleteSnapshot)
 	api.Get("/settings/cloud-storage", h.GetCloudStorage)
@@ -27,6 +29,7 @@ func registerSandboxRoutes(params Params, api fiber.Router) {
 	sandboxes.Put("/:id/snapshot-policy", h.SetSnapshotPolicy)
 	sandboxes.Post("/:id/previews", h.CreatePreview)
 	sandboxes.Delete("/:id/previews", h.RevokePreview)
+	sandboxes.Get("/:id/ports", h.ListPorts)
 
 	sandboxes.Post("/:id/exec", h.ExecCommand)
 	sandboxes.Post("/:id/exec/stream", h.ExecCommandStream)

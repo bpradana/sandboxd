@@ -1,15 +1,23 @@
 // sandboxd web console: create, inspect, and kill sandboxes, and open
-// interactive terminals in them.
+// interactive terminals and run tabs in them.
 
 import { api, engineReady, getAPIKey, setAPIKey } from "./api.js";
+import { el } from "./dom.js";
+import { formatBytes } from "./file-utils.js";
+import { describeJob } from "./job-progress.js";
 import { TerminalSession } from "./terminal.js";
+import { RunSession } from "./run.js";
 import { setupCloudStorage } from "./cloud-storage.js";
 import { setupWorkspaceTools } from "./workspace-tools.js";
 import { FileExplorer } from "./file-explorer.js";
 
 const POLL_INTERVAL_MS = 3000;
-// Open terminal tabs, so a reloaded page reattaches to their shells.
-const TERMINALS_STORAGE = "sandboxd.terminals";
+// Running backups and restores are read from the daemon's memory, so this is
+// cheap to poll. Listing snapshots is not: it reads every manifest from cloud
+// storage, which can take seconds against a remote bucket.
+const JOBS_INTERVAL_MS = 1000;
+// Open tabs, so a reloaded page reattaches to their shells and commands.
+const TABS_STORAGE = "sandboxd.terminals";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -18,9 +26,10 @@ const state = {
   // Previous CPU samples, for usage between polls: id -> {micros, at}.
   cpuSamples: new Map(),
   stats: new Map(),
-  terminals: [],
-  activeTerminal: null,
-  terminalCounters: new Map(),
+  // Workspace tabs, terminals and run tabs alike.
+  tabs: [],
+  activeTab: null,
+  tabCounters: new Map(),
   // Set after an auth failure was reported, so polling does not repeat it.
   authWarned: false,
   snapshotsEnabled: false,
@@ -31,19 +40,6 @@ const state = {
 
 // ---------- small DOM helpers ----------
 
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key === "class") node.className = value;
-    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
-    else if (value !== undefined && value !== null) node.setAttribute(key, value);
-  }
-  for (const child of children.flat()) {
-    if (child !== null && child !== undefined) node.append(child);
-  }
-  return node;
-}
-
 function toast(message, kind = "info") {
   const node = el("div", { class: `toast ${kind}`, role: kind === "error" ? "alert" : "status" }, message);
   $("#toasts").append(node);
@@ -52,18 +48,6 @@ function toast(message, kind = "info") {
 
 function shortID(id) {
   return id.length > 16 ? `${id.slice(0, 12)}…${id.slice(-4)}` : id;
-}
-
-function formatBytes(bytes) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 function formatRemaining(isoTime) {
@@ -115,8 +99,8 @@ async function refreshSandboxes() {
     state.cpuSamples.set(sb.id, { micros: stats.cpu_usage_micros, at: now });
     state.stats.set(sb.id, stats);
   });
-  // Terminals of sandboxes that stopped can never come back.
-  for (const entry of state.terminals) {
+  // Tabs of sandboxes that stopped can never come back.
+  for (const entry of state.tabs) {
     const sb = state.sandboxes.find((candidate) => candidate.id === entry.session.sandboxID);
     if (!sb || sb.state !== "running") entry.session.markGone();
   }
@@ -127,7 +111,6 @@ async function refreshSandboxes() {
     }
   }
   renderSandboxes();
-  workspaceTools.updatePreviews(state.sandboxes);
   fileExplorer.update(state.sandboxes);
 }
 
@@ -181,7 +164,8 @@ function renderSandbox(sb) {
           { class: "actions" },
           el("button", { class: "btn small primary", type: "button", onclick: () => openTerminal(sb.id) }, "Terminal"),
           el("button", { class: "btn small", type: "button", onclick: () => fileExplorer.open(sb) }, "Files"),
-          el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openAppPreview(sb) }, "Preview"),
+          el("button", { class: "btn small", type: "button", onclick: () => openRun(sb.id) }, "Run"),
+          el("button", { class: "btn small", type: "button", onclick: () => openRun(sb.id, { focus: "port" }) }, "Preview"),
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openBackupPolicy(sb) }, "Auto backups") : null,
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", disabled: sb.snapshot_in_progress ? "" : null, onclick: (event) => checkpointSandbox(sb.id, event.currentTarget) }, "Snapshot") : null,
           el("button", { class: "btn small", type: "button", onclick: () => keepalive(sb.id) }, "Keepalive"),
@@ -292,7 +276,12 @@ async function killSandbox(id) {
 
 async function refreshSnapshots(force = false) {
   if (state.snapshotRefreshPending) return;
-  const interval = state.snapshots.some((item) => item.status === "capturing" || item.status === "uploading") ? 10000 : 60000;
+  // Listing snapshots costs a cloud round trip per manifest, so it keeps a
+  // slow cadence even while a job runs; the progress bar is fed by
+  // refreshSnapshotJobs instead.
+  const active = state.snapshots.some((item) => item.progress || item.status === "capturing" || item.status === "uploading")
+    || state.sandboxes.some((sb) => sb.snapshot_in_progress);
+  const interval = active ? 10000 : 60000;
   if (!force && Date.now() - state.snapshotsPolledAt < interval) return;
   state.snapshotRefreshPending = true;
   state.snapshotsPolledAt = Date.now();
@@ -319,19 +308,63 @@ async function refreshSnapshots(force = false) {
   } finally { state.snapshotRefreshPending = false; }
 }
 
+// snapshotProgress renders one running job: what it is doing, how far it has
+// got, and a bar once the total is known. A capture has no total, so it shows
+// the bytes written under a bar that only says "still working".
+function snapshotProgress(progress) {
+  const job = describeJob(progress);
+  const known = job.percent !== null;
+  const bar = el("div", { class: `bar${known ? "" : " indeterminate"}` }, el("i"));
+  if (known) bar.firstChild.style.width = `${job.percent}%`;
+  return el("div", { class: "job", role: "status" },
+    el("div", { class: "job-head" },
+      el("span", {}, job.label),
+      el("b", {}, known ? `${job.percent}%` : job.amount)),
+    bar,
+    known ? el("div", { class: "sandbox-meta" }, job.amount) : null);
+}
+
+// refreshSnapshotJobs updates the progress of running jobs without touching
+// cloud storage. When the last job finishes, the snapshot list is refreshed
+// once so the card settles on its final status.
+async function refreshSnapshotJobs() {
+  if (document.hidden || !state.snapshotsEnabled) return;
+  let jobs;
+  try {
+    jobs = await api("GET", "/snapshots/progress");
+  } catch {
+    return; // The next tick tries again; the list keeps its own cadence.
+  }
+  const byID = new Map((jobs || []).map((job) => [job.snapshot_id, job.progress]));
+  const had = state.snapshots.some((item) => item.progress);
+  let changed = false;
+  for (const item of state.snapshots) {
+    const progress = byID.get(item.id) || null;
+    if (JSON.stringify(progress) === JSON.stringify(item.progress || null)) continue;
+    item.progress = progress;
+    changed = true;
+  }
+  if (!changed) return;
+  $("#snapshot-list").replaceChildren(...state.snapshots.map(renderSnapshot));
+  // A job that just ended leaves a stale status on the card.
+  if (had && !byID.size) await refreshSnapshots(true);
+}
+
 function renderSnapshot(item) {
   const ready = item.status === "ready";
   const finished = ready || item.status === "failed";
+  const restoring = item.progress?.operation === "restore";
   return el("li", { class: "sandbox" },
     el("div", { class: "sandbox-top" },
       el("span", { class: "sandbox-id", title: item.id }, shortID(item.id)),
-      el("span", { class: `badge ${item.status}` }, item.status)),
+      el("span", { class: `badge ${restoring ? "restoring" : item.status}` }, restoring ? "restoring" : item.status)),
     el("div", { class: "sandbox-meta" },
       [shortID(item.sandbox_id), item.architecture, item.size_bytes ? formatBytes(item.size_bytes) : "", new Date(item.created_at).toLocaleString()].filter(Boolean).join(" · ")),
+    item.progress ? snapshotProgress(item.progress) : null,
     item.failure_reason ? el("div", { class: "sandbox-meta" }, item.failure_reason) : null,
     el("div", { class: "actions" },
-      ready ? el("button", { class: "btn small primary", type: "button", onclick: (event) => restoreSnapshot(item.id, event.currentTarget) }, "Restore") : null,
-      finished ? el("button", { class: "btn small danger", type: "button", onclick: (event) => deleteSnapshot(item.id, event.currentTarget) }, "Delete backup") : null));
+      ready ? el("button", { class: "btn small primary", type: "button", disabled: restoring ? "" : null, onclick: (event) => restoreSnapshot(item.id, event.currentTarget) }, restoring ? "Restoring…" : "Restore") : null,
+      finished ? el("button", { class: "btn small danger", type: "button", disabled: item.progress ? "" : null, onclick: (event) => deleteSnapshot(item.id, event.currentTarget) }, "Delete backup") : null));
 }
 
 async function saveSnapshot(id, button) {
@@ -354,7 +387,11 @@ async function restoreSnapshot(id, button) {
     await refreshSandboxes();
     openTerminal(sb.id);
   } catch (err) { toast(`Restore failed: ${err.message}`, "error"); }
-  finally { button.disabled = false; button.textContent = "Restore"; }
+  finally {
+    button.disabled = false;
+    button.textContent = "Restore";
+    await refreshSnapshots(true);
+  }
 }
 
 async function deleteSnapshot(id, button) {
@@ -368,70 +405,91 @@ async function deleteSnapshot(id, button) {
   finally { button.disabled = false; }
 }
 
-// ---------- terminals ----------
+// ---------- workspace tabs ----------
 
-function saveTerminals() {
-  const saved = state.terminals
-    .filter((entry) => entry.session.terminalID)
-    .map(({ session }) => ({ sandboxID: session.sandboxID, terminalID: session.terminalID, label: session.label }));
+// A tab is a shell the user types in, or a run tab: one command's log beside
+// the app it serves. Both reattach after a page reload.
+
+function saveTabs() {
+  const saved = state.tabs
+    .map(({ kind, session }) => (kind === "run" ? session.saved() : { kind, sandboxID: session.sandboxID, terminalID: session.terminalID, label: session.label }))
+    // A terminal is only worth restoring once it has a shell to reattach to;
+    // a run tab also carries its command and the port it was showing.
+    .filter((item) => item.terminalID || (item.kind === "run" && (item.command || item.port)));
   try {
-    localStorage.setItem(TERMINALS_STORAGE, JSON.stringify(saved));
+    localStorage.setItem(TABS_STORAGE, JSON.stringify(saved));
   } catch {
     // Storage unavailable: tabs simply are not restored after a reload.
   }
 }
 
-function savedTerminals() {
+function savedTabs() {
   try {
-    const saved = JSON.parse(localStorage.getItem(TERMINALS_STORAGE) || "[]");
-    return Array.isArray(saved) ? saved.filter((item) => item?.sandboxID && item?.terminalID) : [];
+    const saved = JSON.parse(localStorage.getItem(TABS_STORAGE) || "[]");
+    if (!Array.isArray(saved)) return [];
+    // Tabs stored before run tabs existed have no kind and are terminals.
+    return saved.filter((item) => item?.sandboxID).map((item) => ({ ...item, kind: item.kind === "run" ? "run" : "terminal" }));
   } catch {
     return [];
   }
 }
 
-// openTerminal opens a tab with a new shell, or with terminalID reattaches
-// to a shell still running from an earlier page load.
-function openTerminal(sandboxID, { terminalID = null, label = null } = {}) {
+// addTab builds the tab and its pane, and hands the pane to the session that
+// fills it.
+function addTab(kind, sandboxID, label, build) {
   if (typeof window.Terminal !== "function") {
     toast("Terminal emulator failed to load.", "error");
-    return;
+    return null;
   }
+  const counterKey = `${kind}:${sandboxID}`;
   const restoredCount = Number(label?.match(/#(\d+)$/)?.[1]) || 0;
-  const count = Math.max((state.terminalCounters.get(sandboxID) || 0) + 1, restoredCount);
-  state.terminalCounters.set(sandboxID, count);
-  label = label || `${shortID(sandboxID)} #${count}`;
+  const count = Math.max((state.tabCounters.get(counterKey) || 0) + 1, restoredCount);
+  state.tabCounters.set(counterKey, count);
+  label = label || `${kind === "run" ? "run " : ""}${shortID(sandboxID)} #${count}`;
 
-  const pane = el("div", { class: "pane", role: "tabpanel" });
+  const pane = el("div", { class: `pane ${kind}-pane`, role: "tabpanel" });
   $("#panes").append(pane);
-  const closeButton = el("button", { class: "close", type: "button", "aria-label": `Close ${label}`, title: "Close terminal" }, "×");
-  const tab = el("div", { class: "tab", role: "tab", tabindex: "0", title: sandboxID }, el("span", { class: "dot" }), label, closeButton);
+  const closeButton = el("button", { class: "close", type: "button", "aria-label": `Close ${label}`, title: `Close ${kind === "run" ? "run tab" : "terminal"}` }, "×");
+  const tab = el("div", { class: `tab ${kind}-tab`, role: "tab", tabindex: "0", title: sandboxID }, el("span", { class: "dot" }), label, closeButton);
   $("#tabs").append(tab);
 
-  const entry = { tab, pane, session: null };
-  entry.session = new TerminalSession(sandboxID, label, pane, {
-    terminalID,
-    onStateChange: (session) => tab.classList.toggle("closed", session.ended),
-    onAttached: saveTerminals,
-  });
-  state.terminals.push(entry);
+  const entry = { kind, tab, pane, session: null };
+  entry.session = build(pane, label, (session) => tab.classList.toggle("closed", session.ended));
+  state.tabs.push(entry);
 
-  tab.addEventListener("click", () => activateTerminal(entry));
+  tab.addEventListener("click", () => activateTab(entry));
   tab.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") activateTerminal(entry);
+    if (event.key === "Enter" || event.key === " ") activateTab(entry);
   });
   closeButton.addEventListener("click", (event) => {
     event.stopPropagation();
-    closeTerminal(entry);
+    closeTab(entry);
   });
 
-  activateTerminal(entry);
-  entry.session.connect();
+  activateTab(entry);
+  return entry;
 }
 
-function activateTerminal(entry) {
-  state.activeTerminal = entry;
-  for (const other of state.terminals) {
+// openTerminal opens a tab with a new shell, or with terminalID reattaches
+// to a shell still running from an earlier page load.
+function openTerminal(sandboxID, { terminalID = null, label = null } = {}) {
+  const entry = addTab("terminal", sandboxID, label, (pane, tabLabel, onStateChange) =>
+    new TerminalSession(sandboxID, tabLabel, pane, { terminalID, onStateChange, onAttached: saveTabs }));
+  entry?.session.connect();
+}
+
+// openRun opens a tab that runs one command and previews what it serves.
+// Preview opens the same tab from the other end: no command, just the port of
+// an app already running in the sandbox.
+function openRun(sandboxID, { terminalID = null, label = null, command = "", port = null, focus = "command" } = {}) {
+  const entry = addTab("run", sandboxID, label, (pane, tabLabel, onStateChange) =>
+    new RunSession(sandboxID, tabLabel, pane, { terminalID, command, port, onStateChange, onSave: saveTabs }));
+  if (entry) entry.session.focusInput(focus);
+}
+
+function activateTab(entry) {
+  state.activeTab = entry;
+  for (const other of state.tabs) {
     const active = other === entry;
     other.tab.setAttribute("aria-selected", String(active));
     other.pane.classList.toggle("active", active);
@@ -440,19 +498,19 @@ function activateTerminal(entry) {
   entry.session.focus();
 }
 
-// closeTerminal closes the tab and ends its shell.
-function closeTerminal(entry) {
+// closeTab closes the tab and ends whatever it was running.
+function closeTab(entry) {
   entry.session.dispose();
   entry.tab.remove();
   entry.pane.remove();
-  const index = state.terminals.indexOf(entry);
-  state.terminals.splice(index, 1);
-  saveTerminals();
-  if (state.activeTerminal === entry) {
-    const next = state.terminals[Math.min(index, state.terminals.length - 1)];
-    if (next) activateTerminal(next);
+  const index = state.tabs.indexOf(entry);
+  state.tabs.splice(index, 1);
+  saveTabs();
+  if (state.activeTab === entry) {
+    const next = state.tabs[Math.min(index, state.tabs.length - 1)];
+    if (next) activateTab(next);
     else {
-      state.activeTerminal = null;
+      state.activeTab = null;
       $("#workspace-empty").hidden = false;
     }
   }
@@ -489,7 +547,7 @@ function setupSettings() {
 }
 
 // ---------- start ----------
-const workspaceTools = setupWorkspaceTools({ toast, onPolicyChange: refreshSandboxes, onResize: () => window.dispatchEvent(new Event("resize")) });
+const workspaceTools = setupWorkspaceTools({ toast, onPolicyChange: refreshSandboxes });
 const fileExplorer = new FileExplorer({ toast });
 
 function start() {
@@ -499,13 +557,17 @@ function start() {
   loadImages();
   refreshSandboxes();
   refreshSnapshots();
-  for (const saved of savedTerminals()) openTerminal(saved.sandboxID, saved);
+  for (const saved of savedTabs()) {
+    if (saved.kind === "run") openRun(saved.sandboxID, saved);
+    else openTerminal(saved.sandboxID, saved);
+  }
   setInterval(() => {
     if (document.hidden) return;
     refreshSandboxes();
     refreshEngineStatus();
     refreshSnapshots();
   }, POLL_INTERVAL_MS);
+  setInterval(refreshSnapshotJobs, JOBS_INTERVAL_MS);
 }
 
 start();

@@ -62,6 +62,10 @@ func (u *unsupported) DialSandbox(context.Context, string, int) (net.Conn, error
 	return nil, ErrUnsupportedPlatform
 }
 
+func (u *unsupported) ListeningPorts(context.Context, string) ([]ListeningPort, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
 func (u *unsupported) Stats(context.Context, string) (*Stats, error) {
 	return nil, ErrUnsupportedPlatform
 }

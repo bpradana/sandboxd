@@ -339,6 +339,21 @@ func (mr *MockServiceMockRecorder) ListSnapshots(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSnapshots", reflect.TypeOf((*MockService)(nil).ListSnapshots), ctx)
 }
 
+// ListeningPorts mocks base method.
+func (m *MockService) ListeningPorts(ctx context.Context, id string) ([]presentation.ListeningPortResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListeningPorts", ctx, id)
+	ret0, _ := ret[0].([]presentation.ListeningPortResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListeningPorts indicates an expected call of ListeningPorts.
+func (mr *MockServiceMockRecorder) ListeningPorts(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListeningPorts", reflect.TypeOf((*MockService)(nil).ListeningPorts), ctx, id)
+}
+
 // Mkdir mocks base method.
 func (m *MockService) Mkdir(ctx context.Context, id string, req presentation.MkdirRequest) (*presentation.FileInfoResponse, error) {
 	m.ctrl.T.Helper()
@@ -469,6 +484,20 @@ func (m *MockService) SetSnapshotPolicy(arg0 context.Context, arg1 string, arg2 
 func (mr *MockServiceMockRecorder) SetSnapshotPolicy(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSnapshotPolicy", reflect.TypeOf((*MockService)(nil).SetSnapshotPolicy), arg0, arg1, arg2)
+}
+
+// SnapshotJobs mocks base method.
+func (m *MockService) SnapshotJobs() []presentation.SnapshotJobResponse {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SnapshotJobs")
+	ret0, _ := ret[0].([]presentation.SnapshotJobResponse)
+	return ret0
+}
+
+// SnapshotJobs indicates an expected call of SnapshotJobs.
+func (mr *MockServiceMockRecorder) SnapshotJobs() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SnapshotJobs", reflect.TypeOf((*MockService)(nil).SnapshotJobs))
 }
 
 // StatFile mocks base method.

@@ -114,17 +114,19 @@ type SessionExecRequest struct {
 
 // TerminalRequest opens a new terminal, an interactive command on a
 // pseudo-terminal, under the caller-chosen ID, or with Attach reattaches to
-// a running one (Argv, Env, and Cwd are then ignored). An empty Argv starts
-// a login shell (bash when the image has it, else sh).
+// a running one (Argv, Command, Env, and Cwd are then ignored). An empty Argv
+// starts a login shell (bash when the image has it, else sh), interactive or,
+// with Command, running that command line and exiting with it.
 type TerminalRequest struct {
-	ID     string
-	Attach bool
-	User   string
-	Argv   []string
-	Env    map[string]string
-	Cwd    string
-	Cols   uint16
-	Rows   uint16
+	ID      string
+	Attach  bool
+	User    string
+	Argv    []string
+	Command string
+	Env     map[string]string
+	Cwd     string
+	Cols    uint16
+	Rows    uint16
 	// Ready, if set, runs once the terminal is attached, before any output.
 	Ready func() error
 }
@@ -169,6 +171,17 @@ type Image struct {
 	CreatedAt time.Time
 }
 
+// ListeningPort is a TCP socket accepting connections inside a sandbox.
+// Loopback and Unspecified say whether DialSandbox can reach it: it dials
+// IPv4 loopback, so a port bound to another address is listed but not
+// reachable.
+type ListeningPort struct {
+	Port        int
+	Address     string
+	Loopback    bool
+	Unspecified bool
+}
+
 // Exit reports that a sandbox's init process ended without the engine being
 // asked to destroy it (crash, OOM of init, kill from outside).
 type Exit struct {
@@ -199,6 +212,9 @@ type Engine interface {
 	CaptureCheckpoint(ctx context.Context, id string, dst io.Writer, maxBytes int64) error
 	// DialSandbox connects only to IPv4 loopback inside this sandbox's network namespace.
 	DialSandbox(ctx context.Context, id string, port int) (net.Conn, error)
+	// ListeningPorts reports the TCP sockets listening inside this sandbox's
+	// network namespace, lowest port first.
+	ListeningPorts(ctx context.Context, id string) ([]ListeningPort, error)
 	Stats(ctx context.Context, id string) (*Stats, error)
 
 	Exec(ctx context.Context, id string, req ExecRequest, out OutputFunc) (*ExecResult, error)

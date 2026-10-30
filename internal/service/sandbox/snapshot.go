@@ -187,7 +187,7 @@ func (s *service) CreateSnapshot(ctx context.Context, id string, req presentatio
 		_ = s.snapshots.PutManifest(ctx, manifest)
 		return nil, mapError(err)
 	}
-	response := snapshotResponse(manifest, s.now())
+	response := s.snapshotResponse(manifest, s.now())
 	owned = false
 	go func() {
 		defer release()
@@ -204,6 +204,7 @@ func canSnapshot(sb *model.Sandbox) bool {
 func (s *service) runSnapshot(m snapshot.Manifest, file *os.File) {
 	ctx, cancel := context.WithDeadline(context.Background(), m.DeadlineAt)
 	defer cancel()
+	defer s.jobProgress.done(m.ID)
 	go func() {
 		select {
 		case <-s.stop:
@@ -272,7 +273,13 @@ func (s *service) captureAndUpload(ctx context.Context, m *snapshot.Manifest, fi
 		captureCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 	}
-	if err := capture(captureCtx, m.SandboxID, io.MultiWriter(file, sum), s.snapshotCfg.MaxBytes); err != nil {
+	// The archive's size is only known once it has been written, so capture
+	// reports bytes so far against no total.
+	s.jobProgress.enter(m.ID, operationBackup, phaseCapturing, 0, 0)
+	captured := &countingWriter{dst: file, report: func(written int64) {
+		s.jobProgress.advance(m.ID, phaseCapturing, written)
+	}}
+	if err := capture(captureCtx, m.SandboxID, io.MultiWriter(captured, sum), s.snapshotCfg.MaxBytes); err != nil {
 		return err
 	}
 	info, err := file.Stat()
@@ -286,21 +293,32 @@ func (s *service) captureAndUpload(ctx context.Context, m *snapshot.Manifest, fi
 	if err := s.snapshots.PutManifest(ctx, *m); err != nil {
 		return err
 	}
-	if err := s.snapshots.Upload(ctx, m.ID, file, m.SizeBytes, m.SHA256); err != nil {
+	s.jobProgress.enter(m.ID, operationBackup, phaseUploading, 0, m.SizeBytes)
+	uploadCtx := snapshot.WithReporter(ctx, s.jobProgress.reporter(m.ID, phaseUploading))
+	if err := s.snapshots.Upload(uploadCtx, m.ID, file, m.SizeBytes, m.SHA256); err != nil {
 		return err
 	}
 	// Verify the provider's checksum (or read back the archive when unavailable)
 	// before committing the ready manifest and releasing the source filesystem.
+	s.jobProgress.enter(m.ID, operationBackup, phaseVerifying, 0, m.SizeBytes)
+	verifyCtx := snapshot.WithReporter(ctx, s.jobProgress.reporter(m.ID, phaseVerifying))
 	if verifier, ok := s.snapshots.(snapshot.Verifier); ok {
-		err = verifier.Verify(ctx, *m, file)
+		err = verifier.Verify(verifyCtx, *m, file)
 	} else {
-		err = s.snapshots.Download(ctx, *m, io.Discard)
+		err = s.snapshots.Download(verifyCtx, *m, io.Discard)
 	}
 	if err != nil {
 		return err
 	}
 	m.Status = snapshot.Ready
 	return s.snapshots.PutManifest(ctx, *m)
+}
+
+// SnapshotJobs reads only this host's progress tracker. Listing snapshots
+// fetches every manifest from cloud storage, which is far too expensive to
+// poll at the rate a progress bar wants.
+func (s *service) SnapshotJobs() []presentation.SnapshotJobResponse {
+	return s.jobProgress.list()
 }
 
 func (s *service) GetSnapshot(ctx context.Context, id string) (*presentation.SnapshotResponse, error) {
@@ -313,7 +331,7 @@ func (s *service) GetSnapshot(ctx context.Context, id string) (*presentation.Sna
 	if err != nil {
 		return nil, snapshotStorageError(err)
 	}
-	response := snapshotResponse(m, s.now())
+	response := s.snapshotResponse(m, s.now())
 	return &response, nil
 }
 
@@ -329,7 +347,7 @@ func (s *service) ListSnapshots(ctx context.Context) ([]presentation.SnapshotRes
 	}
 	result := make([]presentation.SnapshotResponse, 0, len(items))
 	for _, m := range items {
-		result = append(result, snapshotResponse(m, s.now()))
+		result = append(result, s.snapshotResponse(m, s.now()))
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt.After(result[j].CreatedAt) })
 	return result, nil
@@ -351,7 +369,7 @@ func (s *service) DeleteSnapshot(ctx context.Context, id string) error {
 	return snapshotStorageError(s.snapshots.Delete(ctx, id))
 }
 
-func snapshotResponse(m snapshot.Manifest, now time.Time) presentation.SnapshotResponse {
+func (s *service) snapshotResponse(m snapshot.Manifest, now time.Time) presentation.SnapshotResponse {
 	status := m.EffectiveStatus(now)
 	reason := m.FailureReason
 	if status == snapshot.Failed && reason == "" {
@@ -362,6 +380,7 @@ func snapshotResponse(m snapshot.Manifest, now time.Time) presentation.SnapshotR
 		ID: m.ID, SandboxID: m.SandboxID, Status: status,
 		CreatedAt: m.CreatedAt, SizeBytes: m.SizeBytes, SHA256: m.SHA256, Architecture: m.Architecture,
 		Labels: maps.Clone(m.Labels), FailureReason: reason,
+		Progress: s.jobProgress.response(m.ID),
 	}
 }
 
@@ -386,12 +405,18 @@ func (s *service) prepareRestore(ctx context.Context, req presentation.CreateSan
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.snapshotCfg.Timeout)
 	var file *os.File
+	// Keep the ID: req.SnapshotID is cleared before returning, because the
+	// engine restores from the archive rather than resolving the snapshot.
+	snapshotID := req.SnapshotID
+	// cleanup runs when Create finishes, so a restore stays observable for
+	// the whole of it: the download here and the import that follows.
 	cleanup := func() {
 		cancel()
 		if file != nil {
 			_ = file.Close()
 			_ = os.Remove(file.Name())
 		}
+		s.jobProgress.done(snapshotID)
 		release()
 	}
 	fail := func(err error) (presentation.CreateSandboxRequest, string, func(), error) {
@@ -458,9 +483,12 @@ func (s *service) prepareRestore(ctx context.Context, req presentation.CreateSan
 	if err != nil {
 		return fail(mapError(err))
 	}
-	if err := s.snapshots.Download(ctx, m, file); err != nil {
+	s.jobProgress.enter(m.ID, operationRestore, phaseDownloading, 0, m.SizeBytes)
+	downloadCtx := snapshot.WithReporter(ctx, s.jobProgress.reporter(m.ID, phaseDownloading))
+	if err := s.snapshots.Download(downloadCtx, m, file); err != nil {
 		return fail(snapshotStorageError(err))
 	}
+	s.jobProgress.enter(m.ID, operationRestore, phaseImporting, m.SizeBytes, m.SizeBytes)
 	// Image is informational on a restored sandbox; the engine uses the archive.
 	req.Image, req.SnapshotID = m.Config.Image, ""
 	return req, file.Name(), cleanup, nil
