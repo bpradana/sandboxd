@@ -34,3 +34,4 @@ tmp/
 .DS_Store
 .cache/
 .gocache
+node_modules/

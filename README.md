@@ -433,6 +433,28 @@ in any sandbox, so expose the console accordingly.
 
 ## API
 
+### File explorer
+
+Click **Files** on a running sandbox to browse its filesystem. Open folders or
+enter an absolute directory path, filter filenames, create files and folders,
+and upload multiple files. Selecting a regular UTF-8 text file opens the editor;
+use **Save** or Ctrl/Cmd+S to write changes. The explorer checks for intervening
+content changes before saving and asks before overwriting or deleting. These
+checks help avoid accidental edits but are not a transaction with processes
+running inside the sandbox.
+
+The editor accepts files up to 1 MiB and preserves ordinary permission bits,
+UTF-8 BOMs, and uniform CRLF line endings. Binary files and files reached through
+symbolic links can be downloaded; symbolic links are read-only in the editor.
+Browser downloads are capped at 256 MiB; larger files can use the streaming API.
+Uploads use the server's `SANDBOX_FILE_MAX_BYTES` and sandbox storage limits.
+File contents are treated as text or download data, never rendered as HTML in
+the console. API keys stay in request headers. Files remain inside the existing
+sandbox storage and are included in filesystem snapshots.
+
+Run the file-explorer interaction tests with `npm --prefix web ci` followed by
+`npm --prefix web test` (Node 24). No browser dependencies are shipped to users.
+
 ### Automatic backups and app previews
 
 Connect cloud storage, then choose **Auto backups** on a running sandbox, or

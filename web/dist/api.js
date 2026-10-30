@@ -30,35 +30,40 @@ export class APIError extends Error {
   }
 }
 
-// api calls /api/v1<path> and returns the envelope's data.
-export async function api(method, path, body) {
-  const headers = { Accept: "application/json" };
+// Raw file transfers use the same authentication and error handling as JSON.
+export async function request(method, path, { body, contentType, signal } = {}) {
+  const headers = { Accept: "*/*" };
   if (sessionKey) headers.Authorization = `Bearer ${sessionKey}`;
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (contentType) headers["Content-Type"] = contentType;
 
   let response;
   try {
     response = await fetch(`/api/v1${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body,
+      signal,
     });
-  } catch {
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
     throw new APIError(0, "cannot reach the sandboxd API");
   }
-
+  if (response.ok) return response;
   let envelope = null;
   try {
     envelope = await response.json();
   } catch {
     // Non-JSON body (e.g. a proxy error page).
   }
-  if (!response.ok) {
-    const detail = envelope?.errors ? Object.values(envelope.errors).flat().join("; ") : "";
-    const message = detail || envelope?.error || envelope?.message || `${response.status} ${response.statusText}`;
-    throw new APIError(response.status, message, envelope?.error_code);
-  }
-  return envelope?.data;
+  const detail = envelope?.errors ? Object.values(envelope.errors).flat().join("; ") : "";
+  const message = detail || envelope?.error || envelope?.message || `${response.status} ${response.statusText}`;
+  throw new APIError(response.status, message, envelope?.error_code);
+}
+
+export async function api(method, path, body, options = {}) {
+  const response = await request(method, path, { body: body === undefined ? undefined : JSON.stringify(body),
+    contentType: body === undefined ? undefined : "application/json", signal: options.signal });
+  try { return (await response.json())?.data; } catch { return undefined; }
 }
 
 export async function engineReady() {

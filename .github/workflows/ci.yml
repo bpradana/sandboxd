@@ -43,6 +43,11 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./... && GOOS=darwin go vet ./...
       - run: go test -race -count=1 ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: File explorer interaction tests
+        run: npm --prefix web ci && npm --prefix web test
       - name: Build static binary
         run: CGO_ENABLED=0 go build -trimpath -o target/sandboxdctl ./cmd/cli
 

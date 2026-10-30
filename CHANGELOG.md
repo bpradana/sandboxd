@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A sandbox file explorer with directory browsing, text editing, uploads,
+  downloads, file and folder creation, and confirmed deletion.
 - Parallel multipart snapshot uploads with 16 MiB parts, per-part retries and
   checksums, and cleanup of failed or canceled uploads.
 - Parallel ranged snapshot restores and verification against S3's stored

@@ -5,6 +5,7 @@ import { api, engineReady, getAPIKey, setAPIKey } from "./api.js";
 import { TerminalSession } from "./terminal.js";
 import { setupCloudStorage } from "./cloud-storage.js";
 import { setupWorkspaceTools } from "./workspace-tools.js";
+import { FileExplorer } from "./file-explorer.js";
 
 const POLL_INTERVAL_MS = 3000;
 // Open terminal tabs, so a reloaded page reattaches to their shells.
@@ -127,6 +128,7 @@ async function refreshSandboxes() {
   }
   renderSandboxes();
   workspaceTools.updatePreviews(state.sandboxes);
+  fileExplorer.update(state.sandboxes);
 }
 
 function meter(label, value, fraction) {
@@ -178,6 +180,7 @@ function renderSandbox(sb) {
           "div",
           { class: "actions" },
           el("button", { class: "btn small primary", type: "button", onclick: () => openTerminal(sb.id) }, "Terminal"),
+          el("button", { class: "btn small", type: "button", onclick: () => fileExplorer.open(sb) }, "Files"),
           el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openAppPreview(sb) }, "Preview"),
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openBackupPolicy(sb) }, "Auto backups") : null,
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", disabled: sb.snapshot_in_progress ? "" : null, onclick: (event) => checkpointSandbox(sb.id, event.currentTarget) }, "Snapshot") : null,
@@ -487,6 +490,7 @@ function setupSettings() {
 
 // ---------- start ----------
 const workspaceTools = setupWorkspaceTools({ toast, onPolicyChange: refreshSandboxes, onResize: () => window.dispatchEvent(new Event("resize")) });
+const fileExplorer = new FileExplorer({ toast });
 
 function start() {
   setupSettings();
