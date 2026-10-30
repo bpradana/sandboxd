@@ -9,6 +9,44 @@ export function icon(name) {
   return svg;
 }
 
+// sandboxMeta is the line under a sandbox's name. The node it lives on is in
+// it only when the list spans more than one: on a single daemon every card
+// would carry the same name, and behind a router it is the one fact that
+// says where the sandbox actually is.
+export function sandboxMeta(sandbox, nodeCount) {
+  const node = nodeCount > 1 ? sandbox.node : "";
+  const network = sandbox.network === "none" ? "Isolated network"
+    : sandbox.network === "egress" ? "Internet access" : sandbox.network;
+  return [node, network, sandbox.ip_address].filter(Boolean).join(" · ");
+}
+
+// describeCapacity turns a daemon's capacity report into one line of status.
+// It answers the two questions a person actually has while working -- can I
+// still create something, and is this host running out -- and keeps the rest
+// (which node, which architecture) for the tooltip.
+export function describeCapacity(capacity) {
+  if (!capacity) return { text: "", title: "", tight: false };
+  const slots = capacity.sandboxes || {};
+  const host = capacity.host || {};
+  const parts = [];
+  if (slots.max) parts.push(`${slots.active || 0} of ${slots.max} sandboxes`);
+  if (host.memory_available_mb) parts.push(`${size(host.memory_available_mb)} memory free`);
+  if (host.storage_free_mb) parts.push(`${size(host.storage_free_mb)} disk free`);
+  // Tight means the next create is at risk, which is worth showing, not just
+  // reporting: either the slots are nearly gone or the machine's memory is.
+  const slotsLeft = slots.max ? 1 - (slots.active || 0) / slots.max : 1;
+  const memoryLeft = host.memory_mb ? (host.memory_available_mb || 0) / host.memory_mb : 1;
+  return {
+    text: parts.join(" · "),
+    title: [capacity.node, capacity.architecture, capacity.ready ? "engine ready" : "engine unavailable"].filter(Boolean).join(" · "),
+    tight: slotsLeft <= 0.1 || memoryLeft <= 0.1,
+  };
+}
+
+function size(megabytes) {
+  return megabytes >= 1024 ? `${(megabytes / 1024).toFixed(1)} GB` : `${Math.round(megabytes)} MB`;
+}
+
 // describeImage says how a base image should read in the create dialog. An
 // image promoted from a snapshot exists cluster-wide but may not be on this
 // host yet: it is still usable, it just costs a download the first time.
@@ -27,7 +65,7 @@ export class ConsoleUI {
     this.doc = doc;
     this.$ = (id) => doc.getElementById(id);
     this.view = "sandboxes";
-    this.data = { sandboxes: [], snapshots: [], activeTab: null, snapshotsEnabled: false };
+    this.data = { sandboxes: [], snapshots: [], activeTab: null, snapshotsEnabled: false, capacity: null };
     this.createDialog = this.$("create-dialog");
     for (const id of ["create-open", "empty-create", "welcome-create"]) this.$(id).onclick = () => this.showCreate();
     for (const id of ["create-close", "create-cancel"]) this.$(id).onclick = () => this.closeCreate();
@@ -97,6 +135,12 @@ export class ConsoleUI {
     this.$("snapshots-disconnected").hidden = !this.$("snapshots-panel").hidden;
     const running = data.sandboxes.filter((sb) => sb.state === "running").length;
     this.$("workspace-summary").textContent = `${running} running ${running === 1 ? "sandbox" : "sandboxes"}`;
+    const capacity = describeCapacity(data.capacity);
+    const readout = this.$("workspace-capacity");
+    readout.textContent = capacity.text;
+    readout.title = capacity.title;
+    readout.hidden = !capacity.text;
+    readout.classList.toggle("tight", capacity.tight);
     const active = data.activeTab;
     const sb = this.activeSandbox();
     this.$("workspace-kind").textContent = active ? active.kind === "run" ? "COMMAND & APP PREVIEW" : "INTERACTIVE TERMINAL" : "DEVELOPMENT WORKSPACE";

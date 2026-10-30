@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { parseHTML } from "linkedom";
-import { ConsoleUI, describeImage } from "./dist/console-ui.js";
+import { ConsoleUI, describeCapacity, describeImage, sandboxMeta } from "./dist/console-ui.js";
 
 const html = fs.readFileSync(new URL("./dist/index.html", import.meta.url), "utf8");
 
@@ -190,4 +190,40 @@ test("the image picker says which images are not on this host yet", () => {
   assert.equal(unknownHost.disabled, false);
   // Neither must an image listed without one.
   assert.equal(describeImage({ name: "legacy", local: false }, "arm64").disabled, false);
+});
+
+test("the capacity readout answers whether this host can take more work", () => {
+  const roomy = describeCapacity({
+    node: "sandboxd-1", architecture: "arm64", ready: true,
+    sandboxes: { active: 3, max: 64 },
+    host: { cpu_millis: 8000, memory_mb: 8192, memory_available_mb: 4096, storage_free_mb: 51200 },
+  });
+  assert.equal(roomy.text, "3 of 64 sandboxes · 4.0 GB memory free · 50.0 GB disk free");
+  assert.match(roomy.title, /sandboxd-1/);
+  assert.match(roomy.title, /engine ready/);
+  assert.equal(roomy.tight, false);
+
+  // Nearly out of slots is worth showing, not merely reporting.
+  assert.equal(describeCapacity({ sandboxes: { active: 62, max: 64 }, host: { memory_mb: 8192, memory_available_mb: 4096 } }).tight, true);
+  // So is nearly out of memory, even with slots to spare.
+  assert.equal(describeCapacity({ sandboxes: { active: 1, max: 64 }, host: { memory_mb: 8192, memory_available_mb: 400 } }).tight, true);
+
+  // An unreachable daemon leaves the line empty rather than inventing zeroes.
+  assert.equal(describeCapacity(null).text, "");
+  assert.equal(describeCapacity({}).text, "");
+  // Small numbers stay in MB.
+  assert.match(describeCapacity({ sandboxes: { active: 0, max: 8 }, host: { memory_available_mb: 512 } }).text, /512 MB memory free/);
+  assert.match(describeCapacity({ ready: false, node: "n1" }).title, /engine unavailable/);
+});
+
+test("a sandbox names its node only when there is more than one", () => {
+  const sandbox = { node: "sandboxd-2", network: "egress", ip_address: "10.88.0.3" };
+  // One daemon: naming it on every card says nothing.
+  assert.equal(sandboxMeta(sandbox, 1), "Internet access · 10.88.0.3");
+  // Several: which host it is on is the thing you need.
+  assert.equal(sandboxMeta(sandbox, 2), "sandboxd-2 · Internet access · 10.88.0.3");
+  // A daemon too old to report a node must not leave a stray separator.
+  assert.equal(sandboxMeta({ network: "none" }, 3), "Isolated network");
+  // An unknown network mode is passed through rather than hidden.
+  assert.equal(sandboxMeta({ network: "future-mode" }, 1), "future-mode");
 });

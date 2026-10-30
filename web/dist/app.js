@@ -10,7 +10,7 @@ import { RunSession } from "./run.js";
 import { setupCloudStorage } from "./cloud-storage.js";
 import { setupWorkspaceTools } from "./workspace-tools.js";
 import { FileExplorer } from "./file-explorer.js";
-import { ConsoleUI, describeImage, icon } from "./console-ui.js";
+import { ConsoleUI, describeImage, sandboxMeta, icon } from "./console-ui.js";
 
 const POLL_INTERVAL_MS = 3000;
 // Running backups and restores are read from the daemon's memory, so this is
@@ -35,6 +35,8 @@ const state = {
   authWarned: false,
   images: [],
   hostArchitecture: "",
+  capacity: null,
+  nodes: new Set(),
   snapshotsEnabled: false,
   snapshots: [],
   snapshotRefreshPending: false,
@@ -85,6 +87,7 @@ async function refreshSandboxes() {
   }
   state.authWarned = false;
   state.sandboxes = (sandboxes || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  state.nodes = new Set(state.sandboxes.map((sb) => sb.node).filter(Boolean));
 
   const running = state.sandboxes.filter((sb) => sb.state === "running");
   const results = await Promise.allSettled(running.map((sb) => api("GET", `/sandboxes/${encodeURIComponent(sb.id)}/stats`)));
@@ -117,6 +120,18 @@ async function refreshSandboxes() {
   fileExplorer.update(state.sandboxes);
 }
 
+// refreshCapacity reads what this daemon can still take on. It is advisory:
+// the console works without it, so a failure leaves the last reading alone.
+async function refreshCapacity() {
+  try {
+    state.capacity = await api("GET", "/capacity");
+    state.hostArchitecture = state.capacity?.architecture || state.hostArchitecture;
+    updateConsoleUI();
+  } catch {
+    // The next poll tries again.
+  }
+}
+
 function meter(label, value, fraction) {
   const bar = el("div", { class: `bar${fraction > 0.85 ? " hot" : ""}` }, el("i"));
   bar.firstChild.style.width = `${Math.round(Math.min(1, Math.max(0, fraction || 0)) * 100)}%`;
@@ -125,7 +140,7 @@ function meter(label, value, fraction) {
 
 function renderSandbox(sb) {
   const stats = state.stats.get(sb.id);
-  const meta = [sb.network === "none" ? "Isolated network" : sb.network === "egress" ? "Internet access" : sb.network, sb.ip_address].filter(Boolean).join(" · ");
+  const meta = sandboxMeta(sb, state.nodes.size);
   const running = sb.state === "running";
 
   const meters = running && stats
@@ -170,8 +185,15 @@ function renderSandbox(sb) {
           el("button", { class: "btn small ghost", type: "button", onclick: () => openRun(sb.id) }, icon("play"), "Run"),
         )
       : null,
-    running ? el("details", { class: "sandbox-manage" },
+    running ? el("details", {
+        class: "sandbox-manage",
+        // Previews live in the daemon, not in this page: one opened from
+        // another tab or left by a reload is invisible here until asked for.
+        // Ask when the panel opens rather than on every poll.
+        ontoggle: (event) => { if (event.currentTarget.open) void loadPreviews(sb.id, event.currentTarget); },
+      },
         el("summary", {}, "Manage environment", icon("more")),
+        el("div", { class: "preview-sessions", "data-previews": sb.id }),
         el("div", { class: "actions management-actions" },
           el("button", { class: "btn small", type: "button", onclick: () => openRun(sb.id, { focus: "port" }) }, "App preview"),
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openBackupPolicy(sb) }, "Auto backups") : null,
@@ -210,7 +232,7 @@ function renderSandboxes() {
 }
 
 function updateConsoleUI() {
-  consoleUI.update({ sandboxes: state.sandboxes, snapshots: state.snapshots, activeTab: state.activeTab, snapshotsEnabled: state.snapshotsEnabled });
+  consoleUI.update({ sandboxes: state.sandboxes, snapshots: state.snapshots, activeTab: state.activeTab, snapshotsEnabled: state.snapshotsEnabled, capacity: state.capacity });
 }
 
 // ---------- actions ----------
@@ -346,6 +368,50 @@ async function createSandbox(event) {
   } finally {
     submit.disabled = false;
     submit.textContent = "Create sandbox";
+  }
+}
+
+// loadPreviews shows the previews this daemon holds for a sandbox, so one
+// left open by a closed tab can be found and closed instead of occupying a
+// session slot until the sandbox ends.
+async function loadPreviews(id, panel) {
+  const host = panel.querySelector(`[data-previews="${CSS.escape(id)}"]`);
+  if (!host) return;
+  host.replaceChildren(el("p", { class: "sandbox-meta" }, "Checking for open previews…"));
+  let sessions;
+  try {
+    sessions = (await api("GET", `/sandboxes/${encodeURIComponent(id)}/previews`)) || [];
+  } catch (err) {
+    host.replaceChildren(el("p", { class: "sandbox-meta" }, `Previews unavailable: ${err.message}`));
+    return;
+  }
+  if (!sessions.length) {
+    host.replaceChildren(el("p", { class: "sandbox-meta" }, "No previews open."));
+    return;
+  }
+  host.replaceChildren(
+    el("p", { class: "sandbox-meta" }, `${sessions.length} preview${sessions.length === 1 ? "" : "s"} open. Anyone holding the URL can reach the app.`),
+    ...sessions.map((session) => el("div", { class: "preview-session" },
+      el("a", { class: "preview-link", href: session.url, target: "_blank", rel: "noreferrer noopener" }, `Port ${session.port}`),
+      el("span", { class: "sandbox-meta" }, `expires ${new Date(session.expires_at).toLocaleTimeString()}`),
+      el("button", {
+        class: "btn small danger",
+        type: "button",
+        "aria-label": `Close the preview on port ${session.port}`,
+        onclick: (event) => void closePreview(id, session.id, event.currentTarget, panel),
+      }, "Close"))),
+  );
+}
+
+async function closePreview(id, previewID, button, panel) {
+  button.disabled = true;
+  try {
+    await api("DELETE", `/sandboxes/${encodeURIComponent(id)}/previews`, { id: previewID });
+    toast("Preview closed");
+    await loadPreviews(id, panel);
+  } catch (err) {
+    toast(`Close failed: ${err.message}`, "error");
+    button.disabled = false;
   }
 }
 
@@ -704,9 +770,11 @@ function start() {
     if (saved.kind === "run") openRun(saved.sandboxID, saved);
     else openTerminal(saved.sandboxID, saved);
   }
+  void refreshCapacity();
   setInterval(() => {
     if (document.hidden) return;
     refreshSandboxes();
+    refreshCapacity();
     refreshEngineStatus();
     refreshSnapshots();
   }, POLL_INTERVAL_MS);

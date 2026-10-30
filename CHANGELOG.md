@@ -21,6 +21,11 @@ All notable changes to this project are documented here. The format follows
   sandbox that asks for it. `GET /images` marks which are already local, and
   `DELETE /images/{name}` removes one here and cluster-wide. Deleting a
   snapshot a base image is built on is refused until the image is removed.
+- The console surfaces all three: its status bar carries the host's free
+  sandbox slots, memory and disk, turning amber before the next create is at
+  risk; a sandbox's open previews are listed under Manage environment with a
+  way to close one left behind by a reload or another tab; and a sandbox names
+  the node it lives on when the list spans more than one daemon.
 - `GET /sandboxes/{id}/previews`, listing the previews a daemon holds for a
   sandbox, so a routing layer can rebuild preview ownership by asking each
   daemon rather than keeping its own record.
