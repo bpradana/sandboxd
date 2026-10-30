@@ -179,6 +179,11 @@ func (s *S3Store) Upload(ctx context.Context, id string, src io.ReadSeeker, size
 	if err != nil || len(sum) != sha256.Size {
 		return ErrCorrupt
 	}
+	// Snapshot archives are files: independent sections let workers read and
+	// retry parts without buffering the whole archive or sharing a seek cursor.
+	if reader, ok := src.(io.ReaderAt); ok && size > uploadPartSize {
+		return s.uploadMultipart(ctx, id, reader, size)
+	}
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket), Key: aws.String(s.key(id, ".tar.gz")),
 		Body: src, ContentLength: aws.Int64(size), ContentType: aws.String("application/gzip"),
@@ -194,6 +199,13 @@ func (s *S3Store) Download(ctx context.Context, m Manifest, dst io.Writer) error
 	if m.SizeBytes <= 0 || m.SizeBytes > s.maxBytes {
 		return ErrTooLarge
 	}
+	if file, ok := dst.(randomAccessArchive); ok && m.SizeBytes > uploadPartSize {
+		return s.downloadParallel(ctx, m, file)
+	}
+	return s.downloadSequential(ctx, m, dst)
+}
+
+func (s *S3Store) downloadSequential(ctx context.Context, m Manifest, dst io.Writer) error {
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.key(m.ID, ".tar.gz"))})
 	if err != nil {
 		return storageError(err)

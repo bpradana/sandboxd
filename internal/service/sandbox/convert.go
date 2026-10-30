@@ -3,6 +3,7 @@ package sandbox
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/bpradana/sandboxd/internal/engine"
 	"github.com/bpradana/sandboxd/internal/model"
@@ -11,6 +12,8 @@ import (
 
 func toSandboxResponse(sb *model.Sandbox) *presentation.SandboxResponse {
 	return &presentation.SandboxResponse{
+		SnapshotPolicy: sb.SnapshotPolicy, SnapshotInProgress: sb.SnapshotInProgress,
+		NextSnapshotAt: optionalTime(sb.NextSnapshotAt), LastSnapshotAt: optionalTime(sb.LastSnapshotAt), LastSnapshotError: sb.LastSnapshotError,
 		ID:        sb.ID,
 		Image:     sb.Image,
 		State:     sb.State,
@@ -32,6 +35,13 @@ func toSandboxResponse(sb *model.Sandbox) *presentation.SandboxResponse {
 		StopReason:         sb.StopReason,
 		FailureReason:      sb.FailureReason,
 	}
+}
+
+func optionalTime(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	return &value
 }
 
 func toStatsResponse(stats *engine.Stats) *presentation.SandboxStatsResponse {

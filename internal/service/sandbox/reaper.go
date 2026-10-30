@@ -35,6 +35,15 @@ func (s *service) stopBackground() {
 }
 
 func (s *service) runReaper() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-s.stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	ticker := time.NewTicker(s.sandbox.ReaperInterval)
 	defer ticker.Stop()
 	for {
@@ -42,8 +51,8 @@ func (s *service) runReaper() {
 		case <-s.stop:
 			return
 		case <-ticker.C:
-			_ = safego.Run(context.Background(), s.logger, func() error {
-				s.reapOnce(context.Background())
+			_ = safego.Run(ctx, s.logger, func() error {
+				s.reapOnce(ctx)
 				return nil
 			})
 		}
@@ -72,6 +81,13 @@ func (s *service) reapOnce(ctx context.Context) {
 			continue
 		}
 		var reason string
+		expiry := sb.ExpiresAt
+		if sb.IdleTimeout > 0 && !s.busy(sb.ID) && sb.LastActivityAt.Add(sb.IdleTimeout).Before(expiry) {
+			expiry = sb.LastActivityAt.Add(sb.IdleTimeout)
+		}
+		if s.automaticSnapshot(ctx, sb, now, expiry) {
+			continue
+		}
 		switch {
 		case now.After(sb.ExpiresAt):
 			reason = consts.StopReasonExpired

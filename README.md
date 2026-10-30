@@ -384,6 +384,21 @@ cid=$(docker create agent-env); docker export "$cid" -o agent.tar; docker rm "$c
 sandboxdctl image import agent agent.tar
 ```
 
+To create and import a Debian image, run this on the Docker host:
+
+```sh
+sh scripts/create-debian-rootfs.sh                 # Debian trixie, image "debian"
+sh scripts/create-debian-rootfs.sh bookworm debian12
+```
+
+The script builds from the official Debian slim image for the Docker host's CPU
+architecture, includes Bash, Python 3, curl, CA certificates, procps and iproute2,
+and writes `target/debian-<release>-<arch>.tar.gz`. It imports the archive through
+the dev container and refuses to replace an existing sandbox image. Refresh the
+console and select **debian** when creating a sandbox. For a quick preview, run
+`python3 -m http.server 3000 --bind 127.0.0.1` in its terminal, then open **Preview**
+on port `3000`.
+
 Imports are safe for untrusted tarballs:
 
 - entries with absolute paths or `..` are rejected
@@ -417,6 +432,94 @@ the key you enter, which is stored only in your browser. Anyone with a key gets 
 in any sandbox, so expose the console accordingly.
 
 ## API
+
+### File explorer
+
+Click **Files** on a running sandbox to browse its filesystem. Open folders or
+enter an absolute directory path, filter filenames, create files and folders,
+and upload multiple files. Selecting a regular UTF-8 text file opens the editor;
+use **Save** or Ctrl/Cmd+S to write changes. The explorer checks for intervening
+content changes before saving and asks before overwriting or deleting. These
+checks help avoid accidental edits but are not a transaction with processes
+running inside the sandbox.
+
+The editor accepts files up to 1 MiB and preserves ordinary permission bits,
+UTF-8 BOMs, and uniform CRLF line endings. Binary files and files reached through
+symbolic links can be downloaded; symbolic links are read-only in the editor.
+Browser downloads are capped at 256 MiB; larger files can use the streaming API.
+Uploads use the server's `SANDBOX_FILE_MAX_BYTES` and sandbox storage limits.
+File contents are treated as text or download data, never rendered as HTML in
+the console. API keys stay in request headers. Files remain inside the existing
+sandbox storage and are included in filesystem snapshots.
+
+Run the file-explorer interaction tests with `npm --prefix web ci` followed by
+`npm --prefix web test` (Node 24). No browser dependencies are shipped to users.
+
+### Automatic backups and app previews
+
+Connect cloud storage, then choose **Auto backups** on a running sandbox, or
+expand **Automatic backups** when creating one. Choose an interval (15 minutes,
+hourly or daily in the console; 60–86400 seconds through the API), enable backup
+before expiry, and set how many automatic backups to retain (default 5, maximum
+100). Both options can be enabled together.
+
+Scheduled backups freeze all sandbox processes while copying the filesystem,
+then resume them before uploading. Existing shells and terminals remain alive.
+The local capture has a 30-second timeout; canceled or oversized captures thaw
+the sandbox and report an error instead of stopping it. These are crash-consistent
+filesystem copies: applications may need their own database flush/checkpoint
+hooks for transactional consistency. Process memory is never saved.
+
+At TTL or idle expiry, the final backup uses save-and-stop before cleanup.
+Unavailable storage gets at most `SNAPSHOT_TIMEOUT` of extra grace, with retry
+backoff, before normal teardown. Deleting a sandbox manually does not request an
+expiry backup. Retention runs only after a verified automatic backup and only
+deletes older ready automatic backups from that same sandbox. Manual backups are
+kept. Policies follow the sandbox's lifetime and are included in its snapshot
+configuration; a restore starts a fresh schedule. Disconnected cloud storage
+cannot create backups, and failures are shown on the sandbox card.
+
+```json
+{
+  "ttl_seconds": 7200,
+  "snapshot_policy": {
+    "interval_seconds": 900,
+    "before_expiry": true,
+    "retain": 5
+  }
+}
+```
+
+Use `PUT /api/v1/sandboxes/{id}/snapshot-policy` to change a policy. An interval
+of `0` disables scheduling; `before_expiry: false` disables the final backup.
+`POST /api/v1/sandboxes/{id}/snapshots` with `{"keep_running": true}` creates
+an immediate checkpoint without stopping the sandbox.
+
+For a web app, start its HTTP server in a terminal or persistent session, click
+**Preview**, enter its port (for example `3000`), and choose **Open**. The preview
+appears alongside the terminal with **Refresh**, **New tab**, and **Close**.
+The proxy connects only to `127.0.0.1` inside that sandbox's network namespace,
+so it works with `network=none` and does not publish the application's port on
+the host. WebSocket upgrades support development-server hot reload. Apps that
+prohibit framing can be opened with **New tab**.
+
+Docker Compose enables previews and publishes host port `18081` to container port
+`8081`, using `http://localhost:18081` as its preview base URL. For other deployments,
+set `PREVIEW_ENABLED=true`, expose `PREVIEW_ADDRESS` (default `0.0.0.0:8081`), and
+configure `PREVIEW_BASE_URL`. The local default is `http://localhost:8081`; preview
+URLs use random subdomains such as `<session>.localhost:8081`. Remote deployments
+need wildcard DNS and, with HTTPS, a wildcard certificate and reverse proxy for
+the configured preview domain. Use a dedicated preview domain separate from
+your authenticated services and match HTTPS when the console uses HTTPS.
+
+Each preview has a unique browser origin and a capability URL, expires after
+`PREVIEW_TTL` (default one hour, capped by the sandbox's TTL), and can be revoked
+by closing it in the console. Anyone with that URL can access that preview until
+it expires or is revoked. URLs are not persisted in browser storage. API bearer
+headers and ambient cookies are not forwarded. Server-set cookies are renamed
+and restricted to the preview host; applications that directly inspect cookie
+names in JavaScript may need adjustment. Active requests and WebSockets count as
+activity for idle reaping; they do not extend TTL.
 
 ### Cloud filesystem snapshots
 
@@ -459,10 +562,30 @@ environment variables, shared profiles, or workload/instance roles. Credentials
 are never passed into sandboxes. For another S3-compatible provider, set
 `SNAPSHOT_S3_ENDPOINT`; enable `SNAPSHOT_S3_PATH_STYLE` if required by that provider.
 The bucket must already exist. Required permissions are `s3:ListBucket` on the
-bucket and `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` under the configured
+bucket and `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`,
+`s3:AbortMultipartUpload` under the configured
 prefix. Bucket encryption and lifecycle/versioning settings remain under the
 operator's control; with versioning enabled, deleting a snapshot creates delete
 markers and the bucket lifecycle governs removal of older versions.
+
+Archives larger than 16 MiB use S3 multipart uploads: up to four 16 MiB parts
+transfer in parallel, and the SDK retries transient failures for each part.
+The archive is read directly from the temporary file without buffering it all
+in memory. Smaller archives use a single upload. Failed or canceled multipart
+uploads are aborted; configure the bucket's `AbortIncompleteMultipartUpload`
+lifecycle rule to clean up parts left behind by a daemon crash or failed abort.
+This retries parts during a running upload; uploads do not resume across daemon
+restarts. Before marking a backup ready, sandboxd checks S3's stored SHA-256 and
+object size. Multipart SHA-256 is checked against the composite of local part
+hashes, separately from the full-file SHA-256 in the manifest. Providers that
+cannot return a usable checksum use a full download for verification.
+
+Large restores also download up to four 16 MiB ranges in parallel into the
+temporary archive. Conditional reads pin every range to the same object, and
+the full archive SHA-256 is verified before extraction. Providers without
+usable object metadata use a sequential download. Restore downloads, verifies,
+extracts, and creates a new sandbox; it does not create another backup. Capture,
+compression, extraction, and sandbox startup still contribute to the total time.
 
 ```sh
 API=https://sandboxd.example.com/api/v1
@@ -483,7 +606,7 @@ curl -sf -H "$AUTH" "$API/snapshots" | jq .data
 curl -sf -H "$AUTH" -XDELETE "$API/snapshots/$SNAP"
 ```
 
-Save requests return **202** and put the source sandbox into `snapshotting`.
+Save-and-stop requests return **202** and put the source sandbox into `snapshotting`.
 The daemon kills its processes, drains file operations, and archives the merged
 filesystem before unmounting anything. The archive includes the base filesystem,
 so restoring needs no original base image. SHA-256 and size are checked after
@@ -542,7 +665,9 @@ and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
 | `GET` · `PUT` · `DELETE /sandboxes/{id}/files?path=` | Download, upload (raw body), remove |
 | `GET …/files/list` · `GET …/files/stat` · `POST …/files/mkdir` | Directory operations |
 | `POST /sandboxes/{id}/terminal/tickets` · `GET /sandboxes/{id}/terminal` | Interactive terminal (WebSocket) |
-| `POST /sandboxes/{id}/snapshots` | Asynchronously save-and-stop a filesystem snapshot |
+| `POST /sandboxes/{id}/snapshots` | Save-and-stop, or checkpoint with `keep_running: true` |
+| `PUT /sandboxes/{id}/snapshot-policy` | Configure scheduled/pre-expiry backups and retention |
+| `POST /sandboxes/{id}/previews` · `DELETE /sandboxes/{id}/previews` | Open or revoke an isolated app preview |
 | `GET /snapshots` · `GET /snapshots/{id}` · `DELETE /snapshots/{id}` | List, inspect progress, or delete cloud snapshots |
 | `GET` · `PUT` · `DELETE /settings/cloud-storage` | Inspect, test-and-save, or disconnect deployment-wide cloud storage |
 | `POST /settings/cloud-storage/test` | Test a candidate connection without saving credentials |

@@ -11,9 +11,11 @@ import (
 
 	"github.com/bpradana/sandboxd/internal/config"
 	"github.com/bpradana/sandboxd/internal/engine"
+	"github.com/bpradana/sandboxd/internal/model"
 	"github.com/bpradana/sandboxd/internal/observability/logging"
 	"github.com/bpradana/sandboxd/internal/observability/metrics"
 	"github.com/bpradana/sandboxd/internal/presentation"
+	"github.com/bpradana/sandboxd/internal/preview"
 	sandboxrepository "github.com/bpradana/sandboxd/internal/repository/sandbox"
 	"github.com/bpradana/sandboxd/internal/snapshot"
 )
@@ -29,6 +31,9 @@ type Service interface {
 	Keepalive(ctx context.Context, id string, req presentation.KeepaliveRequest) (*presentation.SandboxResponse, error)
 	Destroy(ctx context.Context, id string) error
 	CreateSnapshot(ctx context.Context, id string, req presentation.CreateSnapshotRequest) (*presentation.SnapshotResponse, error)
+	SetSnapshotPolicy(context.Context, string, model.SnapshotPolicy) (*presentation.SandboxResponse, error)
+	CreatePreview(context.Context, string, presentation.CreatePreviewRequest) (*preview.Session, error)
+	RevokePreview(context.Context, string, presentation.RevokePreviewRequest) error
 	GetSnapshot(ctx context.Context, id string) (*presentation.SnapshotResponse, error)
 	ListSnapshots(ctx context.Context) ([]presentation.SnapshotResponse, error)
 	DeleteSnapshot(ctx context.Context, id string) error
@@ -73,6 +78,7 @@ type Params struct {
 	Exec      config.ExecConfig
 	Network   config.NetworkConfig
 	Snapshot  config.SnapshotConfig
+	Preview   *preview.Manager
 }
 
 type service struct {
@@ -96,6 +102,7 @@ type service struct {
 	cloudConnection snapshot.Connection
 	cloudSource     string
 	cloudUpdatedAt  time.Time
+	previews        *preview.Manager
 
 	// inFlight counts running commands and uploads per sandbox; the idle
 	// reaper never stops a sandbox while it is doing work.
@@ -113,6 +120,7 @@ type service struct {
 func NewService(params Params) (Service, error) {
 	svc := newService(params.Repo, params.Engine, params.Logger, params.Metrics, params.Sandbox, params.Exec, params.Network)
 	svc.snapshotCfg = params.Snapshot
+	svc.previews = params.Preview
 	svc.snapshotSlots = make(chan struct{}, params.Snapshot.MaxConcurrent)
 	if err := svc.loadCloudStorage(context.Background()); err != nil {
 		return nil, err

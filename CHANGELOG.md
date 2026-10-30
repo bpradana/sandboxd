@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A sandbox file explorer with directory browsing, text editing, uploads,
+  downloads, file and folder creation, and confirmed deletion.
+- Parallel multipart snapshot uploads with 16 MiB parts, per-part retries and
+  checksums, and cleanup of failed or canceled uploads.
+- Parallel ranged snapshot restores and verification against S3's stored
+  SHA-256 checksum to avoid a redundant download after backup when supported.
+- Scheduled filesystem checkpoints that resume running sessions, automatic
+  backups before TTL or idle cleanup, and retention for automatic backups.
+- App previews alongside the terminal, with per-session browser origins,
+  HTTP/WebSocket proxying to sandbox loopback, expiry and revocation.
 - Cloud filesystem snapshots: save and stop sandboxes to S3-compatible storage,
   then restore their files and configuration into new sandboxes.
 - Cloud storage settings with encrypted access keys or server identity,

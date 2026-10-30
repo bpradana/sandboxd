@@ -22,22 +22,27 @@ func TestLoadDefaultsAreValid(t *testing.T) {
 
 func TestLoadRejectsInvalidSettings(t *testing.T) {
 	cases := map[string]map[string]string{
-		"production without api keys":   {"APP_ENV": "production", "APP_API_KEYS": ""},
-		"short production api key":      {"APP_ENV": "production", "APP_API_KEYS": "short"},
-		"default above maximum":         {"SANDBOX_DEFAULT_MEMORY_MB": "8192", "SANDBOX_MAX_MEMORY_MB": "1024"},
-		"exec timeout above http":       {"SANDBOX_EXEC_MAX_TIMEOUT": "20m", "HTTP_WRITE_TIMEOUT": "15m"},
-		"root identity mapping":         {"SANDBOX_UID_MAP_BASE": "0"},
-		"exec uid outside range":        {"SANDBOX_EXEC_UID": "70000"},
-		"invalid cidr":                  {"SANDBOX_NETWORK_CIDR": "not-a-cidr"},
-		"ipv6 cidr":                     {"SANDBOX_NETWORK_CIDR": "fd00::/64"},
-		"invalid dns":                   {"SANDBOX_NETWORK_DNS": "dns.example"},
-		"unknown otlp protocol":         {"OTEL_EXPORTER_OTLP_PROTOCOL": "datadog"},
-		"no terminals":                  {"SANDBOX_EXEC_MAX_TERMINALS": "0"},
-		"no terminal detach window":     {"SANDBOX_TERMINAL_DETACH_TIMEOUT": "0s"},
-		"snapshot without bucket":       {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": ""},
-		"snapshot credentials in URL":   {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": "test", "SNAPSHOT_S3_ENDPOINT": "https://key:secret@example.com"}, // pragma: allowlist secret -- invalid URL fixture, never real credentials.
-		"snapshot size above PUT limit": {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": "test", "SNAPSHOT_MAX_BYTES": "5368709120"},
-		"snapshot no workers":           {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": "test", "SNAPSHOT_MAX_CONCURRENT": "0"},
+		"preview IP instead of wildcard domain": {"PREVIEW_ENABLED": "true", "PREVIEW_BASE_URL": "http://127.0.0.1:8081"},
+		"preview URL path":                      {"PREVIEW_ENABLED": "true", "PREVIEW_BASE_URL": "https://preview.example.com/path"},
+		"preview invalid listen address":        {"PREVIEW_ENABLED": "true", "PREVIEW_ADDRESS": "8081"},
+		"preview unbounded lifetime":            {"PREVIEW_ENABLED": "true", "PREVIEW_TTL": "25h"},
+		"preview no sessions":                   {"PREVIEW_ENABLED": "true", "PREVIEW_MAX_SESSIONS": "0"},
+		"production without api keys":           {"APP_ENV": "production", "APP_API_KEYS": ""},
+		"short production api key":              {"APP_ENV": "production", "APP_API_KEYS": "short"},
+		"default above maximum":                 {"SANDBOX_DEFAULT_MEMORY_MB": "8192", "SANDBOX_MAX_MEMORY_MB": "1024"},
+		"exec timeout above http":               {"SANDBOX_EXEC_MAX_TIMEOUT": "20m", "HTTP_WRITE_TIMEOUT": "15m"},
+		"root identity mapping":                 {"SANDBOX_UID_MAP_BASE": "0"},
+		"exec uid outside range":                {"SANDBOX_EXEC_UID": "70000"},
+		"invalid cidr":                          {"SANDBOX_NETWORK_CIDR": "not-a-cidr"},
+		"ipv6 cidr":                             {"SANDBOX_NETWORK_CIDR": "fd00::/64"},
+		"invalid dns":                           {"SANDBOX_NETWORK_DNS": "dns.example"},
+		"unknown otlp protocol":                 {"OTEL_EXPORTER_OTLP_PROTOCOL": "datadog"},
+		"no terminals":                          {"SANDBOX_EXEC_MAX_TERMINALS": "0"},
+		"no terminal detach window":             {"SANDBOX_TERMINAL_DETACH_TIMEOUT": "0s"},
+		"snapshot without bucket":               {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": ""},
+		"snapshot credentials in URL":           {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": "test", "SNAPSHOT_S3_ENDPOINT": "https://key:secret@example.com"}, // pragma: allowlist secret -- invalid URL fixture, never real credentials.
+		"snapshot size above PUT limit":         {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": "test", "SNAPSHOT_MAX_BYTES": "5368709120"},
+		"snapshot no workers":                   {"SNAPSHOT_ENABLED": "true", "SNAPSHOT_S3_BUCKET": "test", "SNAPSHOT_MAX_CONCURRENT": "0"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {

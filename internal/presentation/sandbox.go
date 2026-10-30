@@ -1,8 +1,13 @@
 package presentation
 
-import "time"
+import (
+	"time"
+
+	"github.com/bpradana/sandboxd/internal/model"
+)
 
 type CreateSandboxRequest struct {
+	SnapshotPolicy *model.SnapshotPolicy `json:"snapshot_policy,omitempty" validate:"omitempty"`
 	// Image is the base root filesystem; defaults to SANDBOX_DEFAULT_IMAGE.
 	Image string `json:"image" validate:"excluded_with=SnapshotID,omitempty,max=64" example:"alpine"`
 	// SnapshotID restores a full filesystem backup; mutually exclusive with image.
@@ -47,6 +52,11 @@ type LimitsResponse struct {
 }
 
 type SandboxResponse struct {
+	SnapshotPolicy     model.SnapshotPolicy  `json:"snapshot_policy"`
+	SnapshotInProgress bool                  `json:"snapshot_in_progress"`
+	NextSnapshotAt     *time.Time            `json:"next_snapshot_at,omitempty"`
+	LastSnapshotAt     *time.Time            `json:"last_snapshot_at,omitempty"`
+	LastSnapshotError  string                `json:"last_snapshot_error,omitempty"`
 	ID                 string                `json:"id" example:"sbx_01jbq3w4k7m2x9z8a1b2c3d4e5"`
 	Image              string                `json:"image" example:"alpine"`
 	State              string                `json:"state" example:"running"`

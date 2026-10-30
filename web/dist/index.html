@@ -47,6 +47,13 @@
           <label>Labels <small>key=value, comma separated</small>
             <input name="labels" type="text" placeholder="owner=me">
           </label>
+          <details class="backup-options">
+            <summary>Automatic backups</summary>
+            <p class="muted">Connect cloud storage in Settings first.</p>
+            <label>Schedule<select name="backup_interval"><option value="0">Off</option><option value="900">Every 15 minutes</option><option value="3600">Hourly</option><option value="86400">Daily</option></select></label>
+            <label class="checkbox"><input name="backup_before_expiry" type="checkbox">Back up before TTL or idle cleanup</label>
+            <label>Keep latest automatic backups<input name="backup_retain" type="number" min="1" max="100" value="5"></label>
+          </details>
           <button class="btn primary" type="submit" id="create-submit">Create sandbox</button>
         </form>
       </details>
@@ -68,6 +75,7 @@
     </aside>
 
     <section class="workspace">
+      <div class="terminal-workspace">
       <nav id="tabs" class="tabs" role="tablist"></nav>
       <div id="panes" class="panes">
         <div id="workspace-empty" class="workspace-empty">
@@ -75,8 +83,84 @@
           <p class="muted">Each terminal is a login shell on a real PTY, so full-screen programs, Ctrl-C and resizing all work.</p>
         </div>
       </div>
+      </div>
+      <section id="app-preview-panel" class="preview-panel" aria-label="App preview" hidden>
+        <div class="preview-heading"><h2>App preview</h2><button id="preview-close" class="btn small" type="button">Close</button></div>
+        <p id="preview-sandbox" class="muted"></p>
+        <form id="preview-form" class="preview-controls">
+          <label>Port<input id="preview-port" type="number" min="1" max="65535" value="3000" required></label>
+          <button id="preview-connect" class="btn small primary" type="submit">Open</button>
+          <button id="preview-refresh" class="btn small" type="button" disabled>Refresh</button>
+          <a id="preview-external" class="btn small" target="_blank" rel="noopener noreferrer" hidden>New tab ↗</a>
+        </form>
+        <p id="preview-status" class="muted" role="status">Start your app in the terminal, then enter its HTTP port.</p>
+        <iframe id="preview-frame" title="Sandbox application preview" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
+      </section>
     </section>
   </main>
+
+  <dialog id="files-dialog" aria-labelledby="files-title">
+    <div class="files-heading">
+      <div><h2 id="files-title">File explorer</h2><p id="files-sandbox" class="muted"></p></div>
+      <button id="files-close" class="btn ghost" type="button">Close</button>
+    </div>
+    <form id="files-path-form" class="files-path-form">
+      <button id="files-up" class="btn small" type="button" data-file-action aria-label="Parent directory">↑ Up</button>
+      <label for="files-path" class="sr-only">Absolute path inside sandbox</label>
+      <input id="files-path" type="text" value="/" required spellcheck="false" autocomplete="off" data-file-action>
+      <button class="btn small" type="submit" data-file-action>Go</button>
+      <button id="files-refresh" class="btn small" type="button" data-file-action>Refresh</button>
+    </form>
+    <div class="files-toolbar">
+      <button id="files-new-file" class="btn small" type="button" data-file-action>New file</button>
+      <button id="files-new-folder" class="btn small" type="button" data-file-action>New folder</button>
+      <button id="files-upload" class="btn small" type="button" data-file-action>Upload files</button>
+      <input id="files-upload-input" type="file" multiple hidden>
+      <label for="files-filter" class="sr-only">Filter filenames</label>
+      <input id="files-filter" type="search" placeholder="Filter filenames…" aria-label="Filter filenames">
+    </div>
+    <form id="files-create-form" class="files-create-form" hidden>
+      <label id="files-create-label" for="files-create-name">New file</label>
+      <input id="files-create-name" type="text" required maxlength="255" placeholder="Name" autocomplete="off" data-file-action>
+      <button class="btn small primary" type="submit" data-file-action>Create</button>
+      <button id="files-create-cancel" class="btn small" type="button" data-file-action>Cancel</button>
+    </form>
+    <div class="files-body">
+      <section class="files-browser" aria-label="Sandbox files">
+        <div class="files-table-wrap"><table class="files-table">
+          <thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Mode</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody id="files-list"></tbody>
+        </table><p id="files-empty" class="empty">This folder is empty or no filenames match.</p></div>
+        <p id="files-count" class="muted"></p>
+      </section>
+      <section class="files-edit" aria-label="Text editor">
+        <h3 id="files-editor-name">Select a file</h3>
+        <p id="files-editor-info" class="muted"></p>
+        <textarea id="files-editor" aria-label="File contents" spellcheck="false" autocapitalize="off" autocomplete="off" readonly></textarea>
+        <div class="files-editor-actions">
+          <span id="files-dirty" class="muted" role="status"></span>
+          <button id="files-download" class="btn small" type="button" disabled>Download</button>
+          <button id="files-delete" class="btn small danger" type="button" disabled>Delete</button>
+          <button id="files-save" class="btn small primary" type="button" disabled>Save</button>
+        </div>
+      </section>
+    </div>
+    <p id="files-status" role="status" aria-live="polite"></p>
+  </dialog>
+
+  <dialog id="backup-policy-dialog">
+    <form id="backup-policy-form">
+      <h2>Automatic backups</h2>
+      <p id="backup-policy-sandbox" class="muted"></p>
+      <p class="muted">Scheduled backups pause processes during the filesystem copy, then resume before upload. Running sessions stay open.</p>
+      <label>Schedule<select id="backup-policy-interval"><option value="0">Off</option><option value="900">Every 15 minutes</option><option value="3600">Hourly</option><option value="86400">Daily</option></select></label>
+      <label class="checkbox"><input id="backup-policy-expiry" type="checkbox">Back up before TTL or idle cleanup</label>
+      <label>Keep latest automatic backups<input id="backup-policy-retain" type="number" min="1" max="100" value="5" required></label>
+      <p class="muted">Retention applies to automatic backups from this sandbox. Manual backups are kept.</p>
+      <p id="backup-policy-status" role="status"></p>
+      <div class="dialog-actions"><button id="backup-policy-cancel" class="btn ghost" type="button">Cancel</button><button id="backup-policy-save" class="btn primary" type="submit">Save policy</button></div>
+    </form>
+  </dialog>
 
   <dialog id="settings">
     <div class="settings-heading"><h2>Settings</h2><button id="settings-close" class="btn ghost" type="button">Close</button></div>

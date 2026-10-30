@@ -54,7 +54,7 @@ RUN apt-get update && \
 ENV APP_ENV=production
 ENV SANDBOX_STATE_DIR=/var/lib/sandboxd
 
-EXPOSE 8080
+EXPOSE 8080 8081
 VOLUME ["/var/lib/sandboxd"]
 
 COPY --from=build /out/sandboxdctl /app/sandboxdctl

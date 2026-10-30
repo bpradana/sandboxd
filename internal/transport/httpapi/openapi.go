@@ -20,7 +20,9 @@ package httpapi
 // @tag.name files
 // @tag.description File upload, download, listing, and management inside a sandbox.
 // @tag.name snapshots
-// @tag.description Save-and-stop filesystem backups in S3-compatible storage and restore into new sandboxes.
+// @tag.description Filesystem backups, live checkpoints, automatic backup policies and restores in S3-compatible storage.
+// @tag.name previews
+// @tag.description Isolated HTTP and WebSocket application previews on sandbox-local ports.
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization

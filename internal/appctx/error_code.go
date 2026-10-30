@@ -8,6 +8,8 @@ package appctx
 // rather than passing string literals at call sites. Errors without a code fall back to
 // "http_<status>".
 const (
+	CodePreviewUnavailable = "preview_unavailable"
+	CodePreviewNotFound    = "preview_not_found"
 	// auth (401)
 	CodeUnauthorized = "unauthorized" // missing/invalid bearer API key or terminal ticket
 

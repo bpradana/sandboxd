@@ -14,7 +14,9 @@ import (
 	io "io"
 	reflect "reflect"
 
+	model "github.com/bpradana/sandboxd/internal/model"
 	presentation "github.com/bpradana/sandboxd/internal/presentation"
+	preview "github.com/bpradana/sandboxd/internal/preview"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -69,6 +71,21 @@ func (m *MockService) Create(ctx context.Context, req presentation.CreateSandbox
 func (mr *MockServiceMockRecorder) Create(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockService)(nil).Create), ctx, req)
+}
+
+// CreatePreview mocks base method.
+func (m *MockService) CreatePreview(arg0 context.Context, arg1 string, arg2 presentation.CreatePreviewRequest) (*preview.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePreview", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*preview.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePreview indicates an expected call of CreatePreview.
+func (mr *MockServiceMockRecorder) CreatePreview(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePreview", reflect.TypeOf((*MockService)(nil).CreatePreview), arg0, arg1, arg2)
 }
 
 // CreateSession mocks base method.
@@ -395,6 +412,20 @@ func (mr *MockServiceMockRecorder) RemoveFile(ctx, id, req any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFile", reflect.TypeOf((*MockService)(nil).RemoveFile), ctx, id, req)
 }
 
+// RevokePreview mocks base method.
+func (m *MockService) RevokePreview(arg0 context.Context, arg1 string, arg2 presentation.RevokePreviewRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RevokePreview", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RevokePreview indicates an expected call of RevokePreview.
+func (mr *MockServiceMockRecorder) RevokePreview(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokePreview", reflect.TypeOf((*MockService)(nil).RevokePreview), arg0, arg1, arg2)
+}
+
 // SaveCloudStorage mocks base method.
 func (m *MockService) SaveCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) (*presentation.CloudStorageResponse, error) {
 	m.ctrl.T.Helper()
@@ -423,6 +454,21 @@ func (m *MockService) SessionExec(ctx context.Context, id, sessionID string, req
 func (mr *MockServiceMockRecorder) SessionExec(ctx, id, sessionID, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SessionExec", reflect.TypeOf((*MockService)(nil).SessionExec), ctx, id, sessionID, req)
+}
+
+// SetSnapshotPolicy mocks base method.
+func (m *MockService) SetSnapshotPolicy(arg0 context.Context, arg1 string, arg2 model.SnapshotPolicy) (*presentation.SandboxResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetSnapshotPolicy", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*presentation.SandboxResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetSnapshotPolicy indicates an expected call of SetSnapshotPolicy.
+func (mr *MockServiceMockRecorder) SetSnapshotPolicy(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSnapshotPolicy", reflect.TypeOf((*MockService)(nil).SetSnapshotPolicy), arg0, arg1, arg2)
 }
 
 // StatFile mocks base method.

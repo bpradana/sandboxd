@@ -36,6 +36,8 @@ services:
       # Fast reaping keeps the e2e TTL case short.
       SANDBOX_REAPER_INTERVAL: 2s
       UI_ENABLED: "true"
+      PREVIEW_ENABLED: "true"
+      PREVIEW_BASE_URL: ${PREVIEW_BASE_URL:-http://localhost:18081}
       # `mise run docker e2e` shortens this to exercise the detach window.
       SANDBOX_TERMINAL_DETACH_TIMEOUT: ${SANDBOX_TERMINAL_DETACH_TIMEOUT:-10m}
     env_file:
@@ -43,6 +45,7 @@ services:
         required: false
     ports:
       - "8080:8080"
+      - "18081:8081"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
       interval: 5s

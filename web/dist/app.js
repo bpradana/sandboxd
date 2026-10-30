@@ -4,6 +4,8 @@
 import { api, engineReady, getAPIKey, setAPIKey } from "./api.js";
 import { TerminalSession } from "./terminal.js";
 import { setupCloudStorage } from "./cloud-storage.js";
+import { setupWorkspaceTools } from "./workspace-tools.js";
+import { FileExplorer } from "./file-explorer.js";
 
 const POLL_INTERVAL_MS = 3000;
 // Open terminal tabs, so a reloaded page reattaches to their shells.
@@ -125,6 +127,8 @@ async function refreshSandboxes() {
     }
   }
   renderSandboxes();
+  workspaceTools.updatePreviews(state.sandboxes);
+  fileExplorer.update(state.sandboxes);
 }
 
 function meter(label, value, fraction) {
@@ -167,11 +171,19 @@ function renderSandbox(sb) {
       !running && reason ? ` · ${reason}` : "",
     ),
     meters,
+    running && (sb.snapshot_policy?.interval_seconds || sb.snapshot_policy?.before_expiry) ? el("div", { class: "sandbox-meta" },
+      sb.snapshot_in_progress ? "Backing up…" : [sb.snapshot_policy.interval_seconds ? `Scheduled every ${sb.snapshot_policy.interval_seconds / 60} min` : null, sb.snapshot_policy.before_expiry ? "Backup before expiry" : null].filter(Boolean).join(" · "),
+      sb.next_snapshot_at ? ` · Next ${new Date(sb.next_snapshot_at).toLocaleTimeString()}` : "") : null,
+    sb.last_snapshot_error ? el("div", { class: "backup-error", role: "status" }, sb.last_snapshot_error) : null,
     running
       ? el(
           "div",
           { class: "actions" },
           el("button", { class: "btn small primary", type: "button", onclick: () => openTerminal(sb.id) }, "Terminal"),
+          el("button", { class: "btn small", type: "button", onclick: () => fileExplorer.open(sb) }, "Files"),
+          el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openAppPreview(sb) }, "Preview"),
+          state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openBackupPolicy(sb) }, "Auto backups") : null,
+          state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", disabled: sb.snapshot_in_progress ? "" : null, onclick: (event) => checkpointSandbox(sb.id, event.currentTarget) }, "Snapshot") : null,
           el("button", { class: "btn small", type: "button", onclick: () => keepalive(sb.id) }, "Keepalive"),
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: (event) => saveSnapshot(sb.id, event.currentTarget) }, "Save & stop") : null,
           el("button", { class: "btn small danger", type: "button", onclick: () => killSandbox(sb.id) }, "Kill"),
@@ -204,9 +216,23 @@ async function loadImages() {
   }
 }
 
+async function checkpointSandbox(id, button) {
+  button.disabled = true;
+  try {
+    await api("POST", `/sandboxes/${encodeURIComponent(id)}/snapshots`, { keep_running: true });
+    toast("Snapshot started. Processes resume after the filesystem copy.");
+    await refreshSandboxes();
+    await refreshSnapshots(true);
+  } catch (err) { toast(err.message, "error"); }
+  finally { button.disabled = false; }
+}
+
 function readCreateForm(form) {
   const data = new FormData(form);
   const body = { network: data.get("network") || "none" };
+  if (Number(data.get("backup_interval")) || data.has("backup_before_expiry")) {
+    body.snapshot_policy = { interval_seconds: Number(data.get("backup_interval")), before_expiry: data.has("backup_before_expiry"), retain: Number(data.get("backup_retain")) || 5 };
+  }
   if (data.get("image")) body.image = data.get("image");
   for (const field of ["cpu_millis", "memory_mb", "storage_mb", "pids_max", "ttl_seconds", "idle_timeout_seconds"]) {
     const value = data.get(field);
@@ -463,6 +489,8 @@ function setupSettings() {
 }
 
 // ---------- start ----------
+const workspaceTools = setupWorkspaceTools({ toast, onPolicyChange: refreshSandboxes, onResize: () => window.dispatchEvent(new Event("resize")) });
+const fileExplorer = new FileExplorer({ toast });
 
 function start() {
   setupSettings();

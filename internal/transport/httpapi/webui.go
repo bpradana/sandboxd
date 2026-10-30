@@ -17,15 +17,17 @@ const UIPath = "/ui/"
 
 // uiContentSecurityPolicy allows only same-origin scripts and connections
 // (including the terminal WebSocket). Inline styles are allowed because the
-// terminal emulator injects style elements at runtime.
+// terminal emulator injects style elements at runtime. The configured preview
+// origin is separately allowed for frames when registering the console.
 const uiContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 type webUIParams struct {
 	fx.In
 
-	Server *fiber.App
-	App    config.AppConfig
+	Server  *fiber.App
+	App     config.AppConfig
+	Preview config.PreviewConfig
 }
 
 // registerWebUIRoutes serves the web console. It is static and public, like
@@ -39,6 +41,11 @@ func registerWebUIRoutes(params webUIParams) error {
 	if err != nil {
 		return err
 	}
+	frameSource, err := params.Preview.FrameSource()
+	if err != nil {
+		return err
+	}
+	policy := uiContentSecurityPolicy + "; frame-src " + frameSource
 
 	params.Server.Get("/", func(c fiber.Ctx) error {
 		return c.Redirect().Status(http.StatusFound).To(UIPath)
@@ -49,7 +56,7 @@ func registerWebUIRoutes(params webUIParams) error {
 		if c.Path() == strings.TrimSuffix(UIPath, "/") {
 			return c.Redirect().Status(http.StatusFound).To(UIPath)
 		}
-		c.Set(fiber.HeaderContentSecurityPolicy, uiContentSecurityPolicy)
+		c.Set(fiber.HeaderContentSecurityPolicy, policy)
 		c.Set(fiber.HeaderXContentTypeOptions, "nosniff")
 		c.Set(fiber.HeaderXFrameOptions, "DENY")
 		c.Set(fiber.HeaderReferrerPolicy, "no-referrer")

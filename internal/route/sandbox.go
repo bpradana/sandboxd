@@ -24,6 +24,9 @@ func registerSandboxRoutes(params Params, api fiber.Router) {
 	sandboxes.Get("/:id/stats", h.GetSandboxStats)
 	sandboxes.Post("/:id/keepalive", h.KeepaliveSandbox)
 	sandboxes.Post("/:id/snapshots", h.CreateSnapshot)
+	sandboxes.Put("/:id/snapshot-policy", h.SetSnapshotPolicy)
+	sandboxes.Post("/:id/previews", h.CreatePreview)
+	sandboxes.Delete("/:id/previews", h.RevokePreview)
 
 	sandboxes.Post("/:id/exec", h.ExecCommand)
 	sandboxes.Post("/:id/exec/stream", h.ExecCommandStream)
