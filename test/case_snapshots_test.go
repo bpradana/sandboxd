@@ -179,11 +179,42 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 	if out := s.mustSucceed(t, fromImage.ID, "cat /workspace/data; test ! -e /etc/alpine-release && echo deleted-stayed-deleted"); out != "persisted\ndeleted-stayed-deleted\n" {
 		t.Fatalf("a sandbox started from the promoted image: %q", out)
 	}
+	// A promoted image is cluster-wide: restart onto a third, empty image
+	// store and the name still resolves, because the first sandbox that asks
+	// for it builds the image from the same archive.
+	stop()
+	start(filepath.Join(stateDir, "empty-images-2"))
+	s = newE2ESuite(t)
+	status, envelope = s.call(t, http.MethodGet, "/api/v1/images", nil)
+	requireStatus(t, status, http.StatusOK, envelope)
+	cloudOnly := decode[[]presentation.ImageResponse](t, envelope)
+	if len(cloudOnly) != 1 || cloudOnly[0].Name != "promoted" || cloudOnly[0].Local {
+		t.Fatalf("a host that has never held the image should list it as remote: %+v", cloudOnly)
+	}
+	materialized := s.createSandbox(t, presentation.CreateSandboxRequest{Image: "promoted", TTLSeconds: 60})
+	if out := s.mustSucceed(t, materialized.ID, "cat /workspace/data"); out != "persisted\n" {
+		t.Fatalf("a sandbox built from a materialized image: %q", out)
+	}
+	status, envelope = s.call(t, http.MethodGet, "/api/v1/images", nil)
+	requireStatus(t, status, http.StatusOK, envelope)
+	if now := decode[[]presentation.ImageResponse](t, envelope); len(now) != 1 || !now[0].Local {
+		t.Fatalf("the image should be local once built: %+v", now)
+	}
+	// The archive is referenced by a name, so it cannot be deleted yet.
+	status, envelope = s.call(t, http.MethodDelete, "/api/v1/snapshots/"+saved.ID, nil)
+	requireStatus(t, status, http.StatusConflict, envelope)
+	status, envelope = s.call(t, http.MethodDelete, "/api/v1/images/promoted", nil)
+	requireStatus(t, status, http.StatusOK, envelope)
+
 	// A name already taken is a conflict, not a silent overwrite.
-	status, envelope = s.call(t, http.MethodPost, "/api/v1/snapshots/"+saved.ID+"/image", presentation.PromoteSnapshotRequest{Image: "promoted"})
+	status, envelope = s.call(t, http.MethodPost, "/api/v1/snapshots/"+saved.ID+"/image", presentation.PromoteSnapshotRequest{Image: "kept"})
+	requireStatus(t, status, http.StatusCreated, envelope)
+	status, envelope = s.call(t, http.MethodPost, "/api/v1/snapshots/"+saved.ID+"/image", presentation.PromoteSnapshotRequest{Image: "kept"})
 	requireStatus(t, status, http.StatusConflict, envelope)
 	status, envelope = s.call(t, http.MethodPost, "/api/v1/snapshots/"+saved.ID+"/image", presentation.PromoteSnapshotRequest{Image: "Not A Name"})
 	requireStatus(t, status, http.StatusBadRequest, envelope)
+	status, envelope = s.call(t, http.MethodDelete, "/api/v1/images/kept", nil)
+	requireStatus(t, status, http.StatusOK, envelope)
 
 	status, envelope = s.call(t, http.MethodDelete, "/api/v1/snapshots/"+saved.ID, nil)
 	requireStatus(t, status, http.StatusOK, envelope)

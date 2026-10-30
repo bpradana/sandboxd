@@ -38,6 +38,10 @@ func (u *unsupported) Stop(context.Context) error {
 
 func (u *unsupported) Ready() error { return ErrUnsupportedPlatform }
 
+func (u *unsupported) HostCapacity() (*HostCapacity, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
 func (u *unsupported) Exits() <-chan Exit { return u.exits }
 
 func (u *unsupported) Images(context.Context) ([]Image, error) {
@@ -47,6 +51,8 @@ func (u *unsupported) Images(context.Context) ([]Image, error) {
 func (u *unsupported) ImportImage(context.Context, string, io.Reader, int64) (*Image, error) {
 	return nil, ErrUnsupportedPlatform
 }
+
+func (u *unsupported) RemoveImage(context.Context, string) error { return ErrUnsupportedPlatform }
 
 func (u *unsupported) Create(context.Context, Spec) (*Info, error) {
 	return nil, ErrUnsupportedPlatform

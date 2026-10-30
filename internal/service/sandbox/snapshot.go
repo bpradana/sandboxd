@@ -366,6 +366,11 @@ func (s *service) DeleteSnapshot(ctx context.Context, id string) error {
 	if status := m.EffectiveStatus(s.now()); status == snapshot.Capturing || status == snapshot.Uploading {
 		return snapshotNotReady()
 	}
+	// A promoted image is a name pointing at this archive. Deleting it would
+	// leave hosts that have not materialized the image unable to ever do so.
+	if names := s.imageRefsFor(ctx, id); len(names) > 0 {
+		return imageInUseError(names)
+	}
 	return snapshotStorageError(s.snapshots.Delete(ctx, id))
 }
 

@@ -22,7 +22,11 @@ import (
 
 type Service interface {
 	Ready() error
+	// Capacity reports what this daemon is and what it can still take on.
+	Capacity(ctx context.Context) (*presentation.CapacityResponse, error)
 	ListImages(ctx context.Context) ([]presentation.ImageResponse, error)
+	// RemoveImage deletes a base image here and, if promoted, cluster-wide.
+	RemoveImage(ctx context.Context, name string) error
 
 	Create(ctx context.Context, req presentation.CreateSandboxRequest) (*presentation.SandboxResponse, error)
 	Get(ctx context.Context, id string) (*presentation.SandboxResponse, error)
@@ -36,6 +40,8 @@ type Service interface {
 	SetSnapshotPolicy(context.Context, string, model.SnapshotPolicy) (*presentation.SandboxResponse, error)
 	CreatePreview(context.Context, string, presentation.CreatePreviewRequest) (*preview.Session, error)
 	RevokePreview(context.Context, string, presentation.RevokePreviewRequest) error
+	// ListPreviews reports the previews this daemon holds for a sandbox.
+	ListPreviews(ctx context.Context, id string) ([]preview.Session, error)
 	ListeningPorts(ctx context.Context, id string) ([]presentation.ListeningPortResponse, error)
 	GetSnapshot(ctx context.Context, id string) (*presentation.SnapshotResponse, error)
 	ListSnapshots(ctx context.Context) ([]presentation.SnapshotResponse, error)

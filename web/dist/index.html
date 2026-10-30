@@ -12,37 +12,81 @@
   <script src="app.js" type="module"></script>
 </head>
 <body>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z"/><path d="m3 8 9 5 9-5M12 13v8M7.5 5.5l9 5"/></symbol><symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol><symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18H6a4 4 0 0 1-.7-7.9A7 7 0 0 1 19 8.5a4.8 4.8 0 0 1-1 9.5h-1M12 20v-9m-3 3 3-3 3 3"/></symbol><symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3m6 0h4"/></symbol><symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol><symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8 4 13 8-13 8Z"/></symbol><symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol><symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 4 1-2h4l1 2 2 1 2-.2 2 3.4-1.2 1.8v3.8l1.2 1.8-2 3.4-2-.2-2 1-1 2h-4l-1-2-2-1-2 .2-2-3.4 1.2-1.8v-3.8L3 8.2l2-3.4L7 5Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol><symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14A8.5 8.5 0 0 1 10 3a8.5 8.5 0 1 0 10 11Z"/></symbol><symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></symbol><symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10"/></symbol></defs></svg>
+  <a class="skip-link" href="#workspace">Skip to workspace</a>
   <header class="topbar">
-    <div class="brand">
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 9l3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>sandboxd</span>
-    </div>
+    <div class="brand"><span class="brand-mark"><svg class="icon " aria-hidden="true"><use href="#i-box"/></svg></span><span>sandboxd<span class="brand-label">Workspace</span></span></div>
+    <div class="breadcrumb"><span class="breadcrumb-home">Console</span><svg class="icon " aria-hidden="true"><use href="#i-chevron"/></svg><span>Workspace</span><span class="environment-tag">CONSOLE</span></div>
     <div class="topbar-right">
-      <span id="engine-status" class="status" data-state="unknown" title="Engine readiness (/readyz)"><i></i><span>checking…</span></span>
-      <button id="settings-open" class="btn ghost" type="button">Settings</button>
+      <span id="engine-status" class="status" data-state="unknown" title="Engine readiness"><i></i><span>Connecting</span></span>
+      <button id="theme-toggle" class="btn icon-button ghost" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon " aria-hidden="true"><use href="#i-sun"/></svg></button>
+      <button id="settings-open" class="btn ghost settings-button" type="button"><svg class="icon " aria-hidden="true"><use href="#i-settings"/></svg><span>Settings</span></button>
     </div>
   </header>
 
   <main class="layout">
-    <aside class="sidebar">
-      <details id="create-panel" class="panel" open>
-        <summary>New sandbox</summary>
+    <aside class="sidebar" aria-label="Sandbox navigation">
+      <div class="sidebar-heading"><div><p class="eyebrow">YOUR ENVIRONMENTS</p><h1>Workspace</h1></div><button id="create-open" class="btn primary icon-button" type="button" title="New sandbox (N)" aria-label="Create a sandbox"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+      <nav class="sidebar-nav" aria-label="Resources">
+        <button id="nav-sandboxes" class="resource-nav" type="button" aria-pressed="true"><svg class="icon " aria-hidden="true"><use href="#i-box"/></svg><span>Sandboxes</span><span id="nav-sandbox-count" class="nav-count">0</span></button>
+        <button id="nav-snapshots" class="resource-nav" type="button" aria-pressed="false"><svg class="icon " aria-hidden="true"><use href="#i-cloud"/></svg><span>Snapshots</span><span id="nav-snapshot-count" class="nav-count">0</span></button>
+      </nav>
+      <label class="sidebar-search"><svg class="icon " aria-hidden="true"><use href="#i-search"/></svg><input id="resource-search" type="search" placeholder="Find a sandbox…" aria-label="Find a sandbox"><kbd>/</kbd></label>
+      <div class="sidebar-scroll">
+        <section id="sandboxes-panel" class="list-panel">
+          <div class="list-head"><h2>Environments</h2><span id="sandbox-count" class="muted"></span></div>
+          <ul id="sandbox-list" class="sandbox-list" aria-live="polite"></ul>
+          <div id="sandbox-empty" class="empty sidebar-empty"><span class="empty-icon"><svg class="icon " aria-hidden="true"><use href="#i-box"/></svg></span><strong>No sandboxes yet</strong><p>Create your first environment to start building.</p><button id="empty-create" class="btn small" type="button">Create sandbox <svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+          <p id="resource-no-results" class="empty" hidden>No matching sandboxes.</p>
+        </section>
+        <section id="snapshots-view" hidden>
+          <div id="snapshots-panel" class="list-panel" hidden>
+            <div class="list-head"><h2>Cloud snapshots</h2><span id="snapshot-count" class="muted"></span></div>
+            <p id="snapshots-status" class="muted" role="status">Save a sandbox to restore its files later.</p>
+            <ul id="snapshot-list" class="sandbox-list" aria-live="polite"></ul>
+          </div>
+          <div id="snapshots-disconnected" class="sidebar-empty empty"><span class="empty-icon"><svg class="icon " aria-hidden="true"><use href="#i-cloud"/></svg></span><strong>A home for your backups</strong><p>Connect cloud storage to save and restore sandbox files.</p><button id="connect-storage" class="btn small" type="button">Connect storage <svg class="icon " aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
+          <p id="snapshot-no-results" class="empty" hidden>No matching snapshots.</p>
+        </section>
+      </div>
+      <div class="sidebar-footer"><span class="connection-dot"></span><span>Isolated environments</span><span class="footer-label">sandboxd</span></div>
+    </aside>
+
+    <section id="workspace" class="workspace" aria-label="Workspace" tabindex="-1">
+      <header class="workspace-heading"><div><p class="eyebrow" id="workspace-kind">DEVELOPMENT WORKSPACE</p><h2 id="workspace-name">Your development workspace</h2></div><div class="workspace-tools"><span id="workspace-image" class="workspace-image" hidden></span><button id="workspace-files" class="btn small ghost" type="button" disabled><svg class="icon " aria-hidden="true"><use href="#i-folder"/></svg><span>Files</span></button><button id="workspace-run" class="btn small ghost" type="button" disabled><svg class="icon " aria-hidden="true"><use href="#i-play"/></svg><span>Run</span></button></div></header>
+      <div class="workspace-surface">
+        <div class="tabbar"><nav id="tabs" class="tabs" role="tablist" aria-label="Terminal and run tabs"></nav><button id="workspace-terminal" class="btn icon-button ghost" type="button" disabled title="New terminal" aria-label="New terminal"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+        <div id="panes" class="panes">
+          <div id="workspace-empty" class="workspace-empty">
+            <div class="welcome-content"><div class="welcome-mark"><svg class="icon " aria-hidden="true"><use href="#i-terminal"/></svg></div><p class="eyebrow">YOUR NEXT SESSION STARTS HERE</p><h2>Your next session<br>starts here.</h2><p class="welcome-description">Run commands, work with files,<br class="desktop-break"> and preview apps in an isolated environment.</p><button id="welcome-create" class="btn primary" type="button"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg>Create a sandbox<span class="button-key">N</span></button><p class="welcome-hint">or open an existing sandbox from the sidebar</p>
+            <div class="welcome-features"><div><svg class="icon " aria-hidden="true"><use href="#i-terminal"/></svg><strong>Real terminals</strong><span>Your shell. Full control.</span></div><div><svg class="icon " aria-hidden="true"><use href="#i-folder"/></svg><strong>Files, in reach</strong><span>Browse, edit, and upload.</span></div><div><svg class="icon " aria-hidden="true"><use href="#i-cloud"/></svg><strong>Pick up anywhere</strong><span>Save and restore snapshots.</span></div></div></div>
+          </div>
+        </div>
+      </div>
+      <footer class="workspace-footer"><div><span class="connection-dot"></span><span id="workspace-summary">No active environments</span></div><span class="workspace-shortcuts"><kbd>N</kbd> New sandbox <span>·</span> <kbd>/</kbd> Search</span></footer>
+    </section>
+  </main>
+
+  <dialog id="create-dialog" aria-labelledby="create-title">
+    <div class="dialog-heading"><div><p class="eyebrow">A FRESH ENVIRONMENT</p><h2 id="create-title">Create a sandbox</h2></div><button id="create-close" class="btn ghost icon-button" type="button" aria-label="Close create sandbox"><svg class="icon " aria-hidden="true"><use href="#i-close"/></svg></button></div>
+    <p class="dialog-description muted">Choose an image. Make it yours.</p>
         <form id="create-form" autocomplete="off">
           <label>Image
-            <select name="image" id="image-select"><option value="">default</option></select>
+            <select name="image" id="image-select"><option value="">Default image</option></select>
           </label>
-          <div class="grid2">
-            <label>CPU (millicores)<input name="cpu_millis" type="number" min="10" step="10" placeholder="default"></label>
-            <label>Memory (MB)<input name="memory_mb" type="number" min="16" placeholder="default"></label>
-            <label>Storage (MB)<input name="storage_mb" type="number" min="16" placeholder="default"></label>
-            <label>Max processes<input name="pids_max" type="number" min="8" placeholder="default"></label>
-            <label>TTL (s)<input name="ttl_seconds" type="number" min="1" placeholder="default"></label>
-            <label>Idle timeout (s)<input name="idle_timeout_seconds" type="number" min="1" placeholder="default"></label>
-          </div>
+          <p id="image-hint" class="muted" role="status" hidden></p>
+          <details class="resource-options"><summary>Resource limits <span class="muted">Optional</span></summary><div class="grid2">
+            <label>CPU (millicores)<input name="cpu_millis" type="number" min="10" step="10" placeholder="Server default"></label>
+            <label>Memory (MB)<input name="memory_mb" type="number" min="16" placeholder="Server default"></label>
+            <label>Storage (MB)<input name="storage_mb" type="number" min="16" placeholder="Server default"></label>
+            <label>Max processes<input name="pids_max" type="number" min="8" placeholder="Server default"></label>
+            <label>TTL (s)<input name="ttl_seconds" type="number" min="1" placeholder="Server default"></label>
+            <label>Idle timeout (s)<input name="idle_timeout_seconds" type="number" min="1" placeholder="Server default"></label>
+          </div></details>
           <fieldset class="segmented">
             <legend>Network</legend>
-            <label><input type="radio" name="network" value="none" checked><span>none</span></label>
-            <label><input type="radio" name="network" value="egress"><span>egress</span></label>
+            <label><input type="radio" name="network" value="none" checked><span>Isolated</span></label>
+            <label><input type="radio" name="network" value="egress"><span>Internet access</span></label>
           </fieldset>
           <label>Labels <small>key=value, comma separated</small>
             <input name="labels" type="text" placeholder="owner=me">
@@ -54,37 +98,9 @@
             <label class="checkbox"><input name="backup_before_expiry" type="checkbox">Back up before TTL or idle cleanup</label>
             <label>Keep latest automatic backups<input name="backup_retain" type="number" min="1" max="100" value="5"></label>
           </details>
-          <button class="btn primary" type="submit" id="create-submit">Create sandbox</button>
+          <div class="dialog-actions"><button id="create-cancel" class="btn ghost" type="button">Cancel</button><button class="btn primary" type="submit" id="create-submit">Create sandbox</button></div>
         </form>
-      </details>
-
-      <section class="panel list-panel">
-        <div class="list-head">
-          <h2>Sandboxes</h2>
-          <span id="sandbox-count" class="muted"></span>
-        </div>
-        <ul id="sandbox-list" class="sandbox-list" aria-live="polite"></ul>
-        <p id="sandbox-empty" class="empty">No sandboxes yet.</p>
-      </section>
-
-      <section id="snapshots-panel" class="panel list-panel" hidden>
-        <div class="list-head"><h2>Cloud snapshots</h2></div>
-        <p id="snapshots-status" class="muted" role="status">Save a sandbox to restore its files later.</p>
-        <ul id="snapshot-list" class="sandbox-list" aria-live="polite"></ul>
-      </section>
-    </aside>
-
-    <section class="workspace">
-      <nav id="tabs" class="tabs" role="tablist"></nav>
-      <div id="panes" class="panes">
-        <div id="workspace-empty" class="workspace-empty">
-          <p>Open a terminal from a sandbox to start working.</p>
-          <p class="muted">Each terminal is a login shell on a real PTY, so full-screen programs, Ctrl-C and resizing all work.</p>
-          <p class="muted">Run opens a tab that runs one command and shows the app it serves beside its log.</p>
-        </div>
-      </div>
-    </section>
-  </main>
+  </dialog>
 
   <dialog id="files-dialog" aria-labelledby="files-title">
     <div class="files-heading">
@@ -181,21 +197,29 @@
     </form>
   </dialog>
 
-  <dialog id="settings">
-    <div class="settings-heading"><h2>Settings</h2><button id="settings-close" class="btn ghost" type="button">Close</button></div>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="settings-heading"><h2 id="settings-title">Settings</h2><button id="settings-close" class="btn ghost" type="button">Close</button></div>
     <nav class="settings-nav" aria-label="Settings sections">
       <button id="settings-api-open" class="btn small" type="button" aria-pressed="true">API access</button>
       <button id="cloud-storage-open" class="btn small" type="button" aria-pressed="false">Cloud storage</button>
+      <button id="images-open" class="btn small" type="button" aria-pressed="false">Base images</button>
     </nav>
     <form method="dialog" id="settings-form">
       <h2>API access</h2>
       <p class="muted">Sent as a bearer token to <code>/api/v1</code>. Leave empty when the server has no keys configured. Stored in this browser only.</p>
+      <label for="api-key" class="sr-only">API key</label>
       <input id="api-key" type="password" autocomplete="off" placeholder="APP_API_KEYS value">
       <div class="dialog-actions">
         <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
         <button class="btn primary" value="save">Save</button>
       </div>
     </form>
+    <section id="images-settings" hidden>
+      <h2>Base images</h2>
+      <p class="muted">What a new sandbox can start from. An image promoted from a snapshot is shared with every daemon on this deployment's cloud storage; removing it here removes it everywhere, and frees the snapshot it was built on for deletion.</p>
+      <p id="image-status" role="status" aria-live="polite">Loading images…</p>
+      <ul id="image-list" class="image-list"></ul>
+    </section>
     <section id="cloud-storage-settings" hidden>
       <h2>Cloud storage</h2>
       <p class="muted">Connect an S3-compatible bucket for this deployment's filesystem backups.</p>

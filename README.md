@@ -57,6 +57,7 @@ $ curl -s -XPOST localhost:8080/api/v1/sandboxes/sbx-1f0c…/exec \
 - [Base images](#base-images)
 - [Web console](#web-console)
 - [API](#api)
+- [Running more than one daemon](#running-more-than-one-daemon)
 - [Behaviour reference](#behaviour-reference)
 - [Configuration](#configuration)
 - [Operations](#operations)
@@ -423,6 +424,13 @@ you can:
 - extend or kill sandboxes
 - open any number of terminal tabs
 - open run tabs: one command's live log beside the app it serves
+
+Use the sidebar to search sandboxes and snapshots. The **+** button creates a
+sandbox; optional resource limits are tucked into the creation dialog. Switch
+between light and dark themes in the header. Outside editors and terminals,
+**N** opens sandbox creation and **/** focuses search. The active session's
+header provides shortcuts to Files, Run, and a new terminal. See the
+[console design](docs/design/README.md) for an editable desktop concept.
 
 Terminals are login shells on a real pseudo-terminal, so `vi`, `top`, Ctrl-C, job
 control, and resizing behave as they do locally. Reloading the page or losing the
@@ -826,6 +834,9 @@ and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
 | `POST /sandboxes/{id}/previews` · `DELETE /sandboxes/{id}/previews` | Open or revoke an isolated app preview |
 | `GET /sandboxes/{id}/ports` | List the TCP ports listening inside the sandbox |
 | `GET /sandboxes/{id}/changes` | List every path the workload created, edited, or removed |
+| `GET /capacity` | This daemon's identity, free slots, promised limits, and the host's real resources |
+| `DELETE /images/{name}` | Remove a base image here, and cluster-wide if it was promoted |
+| `GET /sandboxes/{id}/previews` | List the previews this daemon holds for a sandbox |
 | `GET /snapshots/progress` | Progress of running backups and restores |
 | `GET /snapshots` · `GET /snapshots/{id}` · `DELETE /snapshots/{id}` | List, inspect progress, or delete cloud snapshots |
 | `POST /snapshots/{id}/image` | Import a snapshot as a base image new sandboxes start from |
@@ -987,6 +998,60 @@ bits stripped, and device nodes skipped. The name must be free and must match
 `[a-z0-9][a-z0-9._-]{0,63}`; the console offers it as **Use as image** on a
 snapshot card.
 
+Promoting also publishes the name to cloud storage as a reference to the
+snapshot the files came from. A host that has never held the image builds it
+on the first sandbox that asks for it, from that same archive, so **promote
+once and every host can use it**. `GET /images` lists both kinds, with `local`
+saying which are already here:
+
+```console
+$ curl -s -H "$AUTH" $API/images | jq -c '.data[]'
+{"name":"alpine","created_at":"2026-10-12T09:30:00Z","local":true}
+{"name":"python-ready","created_at":"2026-10-30T16:00:00Z","local":false,"architecture":"arm64"}
+```
+
+A first use costs a download and an extraction, about what restoring the
+snapshot would. Afterwards it is a normal local image. Because the image is a
+reference rather than a second copy, deleting the snapshot underneath it is
+refused until the image is removed with `DELETE /images/{name}`.
+
+## Running more than one daemon
+
+A sandbox is kernel state -- namespaces, cgroups, an overlay, a veth -- on
+exactly one machine. So a *fleet* scales horizontally and each sandbox's
+traffic goes to the host that owns it; sandboxes themselves do not move. What
+the daemon provides for that:
+
+- **`GET /capacity`** answers "should the next sandbox be built here?" from
+  facts rather than scraped metrics: the node's name and architecture, whether
+  its engine is usable, free sandbox slots, the limits already promised to
+  running sandboxes, the machine's real CPU, memory and free disk, and the
+  images it can start from. Promised and actual capacity are separate, because
+  a daemon can be configured to promise more than its host can deliver and
+  that decision is not the daemon's to make.
+- **`node` on every sandbox response** names the daemon a sandbox lives on,
+  set from `SANDBOX_NODE_ID` or the hostname.
+- **Promoted images are cluster-wide**, so placement does not depend on which
+  host happens to hold which image (see above).
+- **Listing is per-host and reconstructible.** `GET /sandboxes` and
+  `GET /sandboxes/{id}/previews` are authoritative for the daemon answering
+  them, so a routing layer's map of "which host owns what" is a cache it can
+  rebuild by asking every daemon. It needs no database of its own.
+
+Two things this does not give you, which are worth saying plainly because
+"horizontal scale" invites the opposite assumption:
+
+> [!WARNING]
+> **No live migration.** `CaptureCheckpoint` preserves filesystem state
+> crash-consistently; there is no CRIU, so process memory is never captured.
+> Moving a sandbox between hosts means stop, snapshot, restore. Processes die
+> and terminals end.
+>
+> **No per-sandbox high availability.** Lose a host and you lose its running
+> sandboxes. You get capacity and a smaller blast radius, not availability for
+> any one sandbox. The mitigation is the pre-expiry snapshot policy: turn it on
+> for anything long-lived.
+
 ## Behaviour reference
 
 <details>
@@ -1075,6 +1140,7 @@ settings stop startup with a clear error.
 
 | Variable | Default | Description |
 |---|---|---|
+| `SANDBOX_NODE_ID` | the hostname | Names this daemon among others; reported on every sandbox and by `/capacity` |
 | `SANDBOX_STATE_DIR` | `/var/lib/sandboxd` | Engine state and storage images |
 | `SANDBOX_IMAGES_DIR` | `$SANDBOX_STATE_DIR/images` | Base images |
 | `SANDBOX_DEFAULT_IMAGE` | `alpine` | Image for requests that name none |

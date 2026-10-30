@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `GET /capacity`, reporting what a placement layer needs to choose a host:
+  the node's name and architecture, whether its engine is usable, free sandbox
+  slots, the limits already promised to running sandboxes, the machine's real
+  CPU, memory and free disk, and the images it can start from. Promised and
+  actual capacity are reported separately.
+- `SANDBOX_NODE_ID` (defaulting to the hostname) and a `node` field on every
+  sandbox response, naming the daemon a sandbox lives on.
+- Promoted base images are now cluster-wide: promotion publishes the name to
+  cloud storage as a reference to the snapshot its files came from, and a host
+  that has never held the image builds it from that same archive on the first
+  sandbox that asks for it. `GET /images` marks which are already local, and
+  `DELETE /images/{name}` removes one here and cluster-wide. Deleting a
+  snapshot a base image is built on is refused until the image is removed.
+- `GET /sandboxes/{id}/previews`, listing the previews a daemon holds for a
+  sandbox, so a routing layer can rebuild preview ownership by asking each
+  daemon rather than keeping its own record.
 - `GET /sandboxes/{id}/changes`, listing every path a sandbox's workload
   created, edited or removed, read out of the overlay's writable layer rather
   than by comparing the sandbox against its base image. Paths the daemon writes

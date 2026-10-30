@@ -51,6 +51,18 @@ func (s *service) RevokePreview(_ context.Context, id string, req presentation.R
 	return nil
 }
 
+// ListPreviews reports this sandbox's open previews. They live in this
+// process, so a caller spanning several daemons asks each one.
+func (s *service) ListPreviews(ctx context.Context, id string) ([]preview.Session, error) {
+	if _, err := s.runningSandbox(ctx, id); err != nil {
+		return nil, err
+	}
+	if s.previews == nil {
+		return []preview.Session{}, nil
+	}
+	return s.previews.List(id), nil
+}
+
 // ListeningPorts reports what is accepting TCP connections inside the
 // sandbox, so a caller can preview a development server without being told
 // its port.

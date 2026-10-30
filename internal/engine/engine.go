@@ -207,6 +207,20 @@ type Stats struct {
 	StorageLimitBytes int64
 }
 
+// HostCapacity is what the machine has, read from the kernel rather than
+// from configuration: a daemon can be configured to promise more than its
+// host can deliver, and a placement layer should be able to see that.
+type HostCapacity struct {
+	Architecture string
+	CPUMillis    int
+	MemoryMB     int
+	// MemoryAvailableMB is the kernel's estimate of what can still be
+	// allocated without swapping, not simply unused memory.
+	MemoryAvailableMB int
+	StorageTotalMB    int
+	StorageFreeMB     int
+}
+
 type Image struct {
 	Name      string
 	CreatedAt time.Time
@@ -244,6 +258,8 @@ type Engine interface {
 	Stop(ctx context.Context) error
 	// Ready reports whether the engine can create sandboxes.
 	Ready() error
+	// HostCapacity reports the machine's own CPU, memory and free storage.
+	HostCapacity() (*HostCapacity, error)
 	// Exits delivers unexpected init exits; the channel is closed by Stop.
 	Exits() <-chan Exit
 
@@ -251,6 +267,9 @@ type Engine interface {
 	// ImportImage adds a base image from a root filesystem archive, refusing
 	// to expand more than maxBytes so a small archive cannot fill the host.
 	ImportImage(ctx context.Context, name string, src io.Reader, maxBytes int64) (*Image, error)
+	// RemoveImage deletes a base image from this host. Sandboxes already
+	// running on it keep their own mount and are unaffected.
+	RemoveImage(ctx context.Context, name string) error
 
 	Create(ctx context.Context, spec Spec) (*Info, error)
 	Destroy(ctx context.Context, id string) error

@@ -52,11 +52,14 @@ type LimitsResponse struct {
 }
 
 type SandboxResponse struct {
-	SnapshotPolicy     model.SnapshotPolicy  `json:"snapshot_policy"`
-	SnapshotInProgress bool                  `json:"snapshot_in_progress"`
-	NextSnapshotAt     *time.Time            `json:"next_snapshot_at,omitempty"`
-	LastSnapshotAt     *time.Time            `json:"last_snapshot_at,omitempty"`
-	LastSnapshotError  string                `json:"last_snapshot_error,omitempty"`
+	SnapshotPolicy     model.SnapshotPolicy `json:"snapshot_policy"`
+	SnapshotInProgress bool                 `json:"snapshot_in_progress"`
+	NextSnapshotAt     *time.Time           `json:"next_snapshot_at,omitempty"`
+	LastSnapshotAt     *time.Time           `json:"last_snapshot_at,omitempty"`
+	LastSnapshotError  string               `json:"last_snapshot_error,omitempty"`
+	// Node is the daemon this sandbox lives on. A sandbox is kernel state on
+	// one machine; anything routing across several needs to know which.
+	Node               string                `json:"node" example:"sandboxd-1"`
 	ID                 string                `json:"id" example:"sbx_01jbq3w4k7m2x9z8a1b2c3d4e5"`
 	Image              string                `json:"image" example:"alpine"`
 	State              string                `json:"state" example:"running"`
@@ -92,4 +95,11 @@ type SandboxStatsResponse struct {
 type ImageResponse struct {
 	Name      string    `json:"name" example:"alpine"`
 	CreatedAt time.Time `json:"created_at"`
+	// Local reports whether this host already holds the image. One that is
+	// not local is still usable: the first sandbox asking for it downloads
+	// and imports it, which takes about as long as restoring a snapshot.
+	Local bool `json:"local" example:"true"`
+	// Architecture is set for an image held in cloud storage, which can only
+	// be materialized on a host of the same architecture.
+	Architecture string `json:"architecture,omitempty" example:"arm64"`
 }

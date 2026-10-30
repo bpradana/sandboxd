@@ -10,6 +10,7 @@ import { RunSession } from "./run.js";
 import { setupCloudStorage } from "./cloud-storage.js";
 import { setupWorkspaceTools } from "./workspace-tools.js";
 import { FileExplorer } from "./file-explorer.js";
+import { ConsoleUI, describeImage, icon } from "./console-ui.js";
 
 const POLL_INTERVAL_MS = 3000;
 // Running backups and restores are read from the daemon's memory, so this is
@@ -32,6 +33,8 @@ const state = {
   tabCounters: new Map(),
   // Set after an auth failure was reported, so polling does not repeat it.
   authWarned: false,
+  images: [],
+  hostArchitecture: "",
   snapshotsEnabled: false,
   snapshots: [],
   snapshotRefreshPending: false,
@@ -64,7 +67,7 @@ async function refreshEngineStatus() {
   const ready = await engineReady();
   const status = $("#engine-status");
   status.dataset.state = ready ? "ready" : "down";
-  status.querySelector("span").textContent = ready ? "engine ready" : "engine unavailable";
+  status.querySelector("span").textContent = ready ? "Engine online" : "Engine unavailable";
 }
 
 // ---------- sandbox list ----------
@@ -122,7 +125,7 @@ function meter(label, value, fraction) {
 
 function renderSandbox(sb) {
   const stats = state.stats.get(sb.id);
-  const meta = [sb.image, sb.network, sb.ip_address].filter(Boolean).join(" · ");
+  const meta = [sb.network === "none" ? "Isolated network" : sb.network === "egress" ? "Internet access" : sb.network, sb.ip_address].filter(Boolean).join(" · ");
   const running = sb.state === "running";
 
   const meters = running && stats
@@ -139,12 +142,12 @@ function renderSandbox(sb) {
   return el(
     "li",
     { class: "sandbox", "data-id": sb.id },
-    el(
-      "div",
-      { class: "sandbox-top" },
-      el("span", { class: "sandbox-id", title: sb.id }, shortID(sb.id)),
-      el("span", { class: `badge ${sb.state}` }, sb.state),
-    ),
+    el("div", { class: "sandbox-top" },
+      el("span", { class: "sandbox-symbol" }, icon("box")),
+      el("div", { class: "sandbox-identity" },
+        el("span", { class: "sandbox-id", title: sb.id }, sb.labels?.name || shortID(sb.id)),
+        el("span", { class: "sandbox-image" }, sb.image || "Default image")),
+      el("span", { class: `badge ${sb.state}` }, sb.state)),
     el(
       "div",
       { class: "sandbox-meta" },
@@ -162,16 +165,21 @@ function renderSandbox(sb) {
       ? el(
           "div",
           { class: "actions" },
-          el("button", { class: "btn small primary", type: "button", onclick: () => openTerminal(sb.id) }, "Terminal"),
-          el("button", { class: "btn small", type: "button", onclick: () => fileExplorer.open(sb) }, "Files"),
-          el("button", { class: "btn small", type: "button", onclick: () => openRun(sb.id) }, "Run"),
-          el("button", { class: "btn small", type: "button", onclick: () => openRun(sb.id, { focus: "port" }) }, "Preview"),
+          el("button", { class: "btn small terminal-action", type: "button", onclick: () => openTerminal(sb.id) }, icon("terminal"), "Terminal"),
+          el("button", { class: "btn small ghost", type: "button", onclick: () => fileExplorer.open(sb) }, icon("folder"), "Files"),
+          el("button", { class: "btn small ghost", type: "button", onclick: () => openRun(sb.id) }, icon("play"), "Run"),
+        )
+      : null,
+    running ? el("details", { class: "sandbox-manage" },
+        el("summary", {}, "Manage environment", icon("more")),
+        el("div", { class: "actions management-actions" },
+          el("button", { class: "btn small", type: "button", onclick: () => openRun(sb.id, { focus: "port" }) }, "App preview"),
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: () => workspaceTools.openBackupPolicy(sb) }, "Auto backups") : null,
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", disabled: sb.snapshot_in_progress ? "" : null, onclick: (event) => checkpointSandbox(sb.id, event.currentTarget) }, "Snapshot") : null,
           el("button", { class: "btn small", type: "button", onclick: () => keepalive(sb.id) }, "Keepalive"),
           state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: (event) => saveSnapshot(sb.id, event.currentTarget) }, "Save & stop") : null,
           el("button", { class: "btn small danger", type: "button", onclick: () => killSandbox(sb.id) }, "Kill"),
-        )
+        ))
       : state.snapshotsEnabled && sb.state === "failed" && sb.stop_reason === "snapshot" && !sb.stopped_at
         ? el("div", { class: "actions" },
           el("button", { class: "btn small", type: "button", onclick: (event) => saveSnapshot(sb.id, event.currentTarget) }, "Retry save"),
@@ -182,21 +190,110 @@ function renderSandbox(sb) {
 
 function renderSandboxes() {
   const list = $("#sandbox-list");
+  const focused = list.contains(document.activeElement) ? {
+    id: document.activeElement.closest(".sandbox")?.dataset.id,
+    tag: document.activeElement.tagName.toLowerCase(),
+    text: document.activeElement.textContent,
+  } : null;
+  const expanded = new Set([...list.querySelectorAll(".sandbox-manage[open]")].map((node) => node.closest(".sandbox").dataset.id));
   list.replaceChildren(...state.sandboxes.map(renderSandbox));
+  for (const row of list.children) {
+    if (expanded.has(row.dataset.id)) row.querySelector(".sandbox-manage")?.setAttribute("open", "");
+    if (row.dataset.id === focused?.id) {
+      [...row.querySelectorAll(focused.tag)].find((node) => node.textContent === focused.text)?.focus({ preventScroll: true });
+    }
+  }
   const running = state.sandboxes.filter((sb) => sb.state === "running").length;
   $("#sandbox-count").textContent = state.sandboxes.length ? `${running} running` : "";
   $("#sandbox-empty").hidden = state.sandboxes.length > 0;
+  updateConsoleUI();
+}
+
+function updateConsoleUI() {
+  consoleUI.update({ sandboxes: state.sandboxes, snapshots: state.snapshots, activeTab: state.activeTab, snapshotsEnabled: state.snapshotsEnabled });
 }
 
 // ---------- actions ----------
 
+// loadImages fills the picker with what this host can start from. A promoted
+// image the host has not built yet is offered, because it will be built on
+// first use; one promoted on another architecture is shown but not offered,
+// because asking for it could only fail.
 async function loadImages() {
   try {
     const images = (await api("GET", "/images")) || [];
+    state.images = images;
+    // The host's architecture decides which cloud images are usable here.
+    // Without it every image stays selectable, which is the old behaviour.
+    try {
+      state.hostArchitecture = (await api("GET", "/capacity"))?.architecture || "";
+    } catch {
+      state.hostArchitecture = "";
+    }
     const select = $("#image-select");
-    select.replaceChildren(el("option", { value: "" }, "default"), ...images.map((image) => el("option", { value: image.name }, image.name)));
+    const chosen = select.value;
+    select.replaceChildren(el("option", { value: "" }, "Default image"), ...images.map((image) => {
+      const described = describeImage(image, state.hostArchitecture);
+      return el("option", { value: image.name, disabled: described.disabled ? "" : null }, described.label);
+    }));
+    if ([...select.options].some((option) => option.value === chosen && !option.disabled)) select.value = chosen;
+    showImageHint();
   } catch {
     // The default image still works.
+  }
+}
+
+// showImageHint explains the one thing a picker cannot: choosing an image
+// this host has never held makes the next create take as long as a restore.
+function showImageHint() {
+  const hint = $("#image-hint");
+  const image = state.images.find((item) => item.name === $("#image-select").value);
+  const remote = image && image.local === false;
+  hint.hidden = !remote;
+  if (remote) {
+    hint.textContent = "This host does not have that image yet. The first sandbox using it downloads and unpacks it, which takes about as long as restoring a snapshot. Later ones start normally.";
+  }
+}
+
+// renderImages lists every image this deployment can start from, so a
+// promoted one can be removed -- which is also what frees the snapshot
+// underneath it for deletion.
+async function renderImages() {
+  const list = $("#image-list");
+  try {
+    const images = (await api("GET", "/images")) || [];
+    state.images = images;
+    $("#image-status").textContent = images.length ? "" : "No base images. Import one with sandboxdctl, or promote a snapshot.";
+    list.replaceChildren(...images.map((image) => el("li", { class: "image-row" },
+      el("div", {},
+        el("div", { class: "image-name" }, image.name),
+        el("div", { class: "sandbox-meta" }, [
+          image.local ? "on this host" : "in cloud storage",
+          image.architecture || "",
+          image.created_at ? new Date(image.created_at).toLocaleDateString() : "",
+        ].filter(Boolean).join(" · "))),
+      el("button", {
+        class: "btn small danger",
+        type: "button",
+        "aria-label": `Remove image ${image.name}`,
+        onclick: (event) => removeImage(image.name, event.currentTarget),
+      }, "Remove"))));
+  } catch (err) {
+    $("#image-status").textContent = `Images unavailable: ${err.message}`;
+    list.replaceChildren();
+  }
+}
+
+async function removeImage(name, button) {
+  if (!window.confirm(`Remove base image ${name}? Sandboxes already running on it keep working. If it was promoted from a snapshot, it is removed from cloud storage too, so other daemons stop resolving the name.`)) return;
+  button.disabled = true;
+  try {
+    await api("DELETE", `/images/${encodeURIComponent(name)}`);
+    toast(`Removed ${name}`);
+    await Promise.all([renderImages(), loadImages()]);
+  } catch (err) {
+    toast(`Remove failed: ${err.message}`, "error");
+    button.disabled = false;
   }
 }
 
@@ -243,6 +340,7 @@ async function createSandbox(event) {
     toast(`Created ${shortID(sb.id)}`);
     await refreshSandboxes();
     openTerminal(sb.id);
+    $("#create-dialog").close();
   } catch (err) {
     toast(`Create failed: ${err.message}`, "error");
   } finally {
@@ -305,7 +403,7 @@ async function refreshSnapshots(force = false) {
     } else if (state.snapshotsEnabled) {
       $("#snapshots-status").textContent = "Snapshot status unavailable. Displayed data may be out of date.";
     }
-  } finally { state.snapshotRefreshPending = false; }
+  } finally { state.snapshotRefreshPending = false; updateConsoleUI(); }
 }
 
 // snapshotProgress renders one running job: what it is doing, how far it has
@@ -346,6 +444,7 @@ async function refreshSnapshotJobs() {
   }
   if (!changed) return;
   $("#snapshot-list").replaceChildren(...state.snapshots.map(renderSnapshot));
+  updateConsoleUI();
   // A job that just ended leaves a stale status on the card.
   if (had && !byID.size) await refreshSnapshots(true);
 }
@@ -470,10 +569,12 @@ function addTab(kind, sandboxID, label, build) {
   state.tabCounters.set(counterKey, count);
   label = label || `${kind === "run" ? "run " : ""}${shortID(sandboxID)} #${count}`;
 
-  const pane = el("div", { class: `pane ${kind}-pane`, role: "tabpanel" });
+  const tabID = `tab-${kind}-${sandboxID}-${count}`;
+  const paneID = `pane-${kind}-${sandboxID}-${count}`;
+  const pane = el("div", { class: `pane ${kind}-pane`, role: "tabpanel", id: paneID, "aria-labelledby": tabID });
   $("#panes").append(pane);
   const closeButton = el("button", { class: "close", type: "button", "aria-label": `Close ${label}`, title: `Close ${kind === "run" ? "run tab" : "terminal"}` }, "×");
-  const tab = el("div", { class: `tab ${kind}-tab`, role: "tab", tabindex: "0", title: sandboxID }, el("span", { class: "dot" }), label, closeButton);
+  const tab = el("div", { class: `tab ${kind}-tab`, role: "tab", id: tabID, "aria-controls": paneID, tabindex: "0", title: sandboxID }, el("span", { class: "dot" }), label, closeButton);
   $("#tabs").append(tab);
 
   const entry = { kind, tab, pane, session: null };
@@ -482,7 +583,13 @@ function addTab(kind, sandboxID, label, build) {
 
   tab.addEventListener("click", () => activateTab(entry));
   tab.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") activateTab(entry);
+    if (event.target !== tab) return;
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activateTab(entry); }
+    const index = state.tabs.indexOf(entry);
+    const next = event.key === "ArrowRight" ? state.tabs[(index + 1) % state.tabs.length]
+      : event.key === "ArrowLeft" ? state.tabs[(index - 1 + state.tabs.length) % state.tabs.length]
+        : event.key === "Home" ? state.tabs[0] : event.key === "End" ? state.tabs.at(-1) : null;
+    if (next) { event.preventDefault(); activateTab(next); next.tab.focus(); }
   });
   closeButton.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -515,9 +622,12 @@ function activateTab(entry) {
   for (const other of state.tabs) {
     const active = other === entry;
     other.tab.setAttribute("aria-selected", String(active));
+    other.tab.setAttribute("tabindex", active ? "0" : "-1");
+    other.pane.setAttribute("aria-hidden", String(!active));
     other.pane.classList.toggle("active", active);
   }
   $("#workspace-empty").hidden = true;
+  updateConsoleUI();
   entry.session.focus();
 }
 
@@ -537,6 +647,7 @@ function closeTab(entry) {
       $("#workspace-empty").hidden = false;
     }
   }
+  updateConsoleUI();
 }
 
 // ---------- settings ----------
@@ -544,12 +655,19 @@ function closeTab(entry) {
 function setupSettings() {
   const dialog = $("#settings");
   const input = $("#api-key");
-  const showAPI = () => {
-    $("#settings-form").hidden = false;
-    $("#cloud-storage-settings").hidden = true;
-    $("#settings-api-open").setAttribute("aria-pressed", "true");
-    $("#cloud-storage-open").setAttribute("aria-pressed", "false");
+  const sections = [
+    ["settings-api-open", "settings-form"],
+    ["cloud-storage-open", "cloud-storage-settings"],
+    ["images-open", "images-settings"],
+  ];
+  const show = (open) => {
+    for (const [button, section] of sections) {
+      $(`#${section}`).hidden = button !== open;
+      $(`#${button}`).setAttribute("aria-pressed", String(button === open));
+    }
   };
+  const showAPI = () => show("settings-api-open");
+  $("#image-select").addEventListener("change", showImageHint);
   $("#settings-open").addEventListener("click", () => {
     showAPI();
     dialog.returnValue = "";
@@ -558,6 +676,7 @@ function setupSettings() {
   });
   $("#settings-close").addEventListener("click", () => dialog.close("cancel"));
   $("#settings-api-open").addEventListener("click", showAPI);
+  $("#images-open").addEventListener("click", () => { show("images-open"); void renderImages(); });
   setupCloudStorage({ toast, onChange: () => refreshSnapshots(true) });
   dialog.addEventListener("close", () => {
     if (dialog.returnValue !== "save") return;
@@ -572,6 +691,7 @@ function setupSettings() {
 // ---------- start ----------
 const workspaceTools = setupWorkspaceTools({ toast, onPolicyChange: refreshSandboxes });
 const fileExplorer = new FileExplorer({ toast });
+const consoleUI = new ConsoleUI({ onFiles: (sb) => fileExplorer.open(sb), onRun: openRun, onTerminal: openTerminal });
 
 function start() {
   setupSettings();

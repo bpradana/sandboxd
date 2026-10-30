@@ -42,3 +42,16 @@ func (e *linuxEngine) ImportImage(ctx context.Context, name string, src io.Reade
 	}
 	return &Image{Name: name, CreatedAt: info.ModTime()}, nil
 }
+
+func (e *linuxEngine) RemoveImage(_ context.Context, name string) error {
+	if err := e.images.Remove(name); err != nil {
+		switch {
+		case errors.Is(err, image.ErrNotFound):
+			return ErrImageNotFound
+		case errors.Is(err, image.ErrInvalidName):
+			return ErrInvalidImageName
+		}
+		return err
+	}
+	return nil
+}

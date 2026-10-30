@@ -24,6 +24,7 @@ import (
 
 func testConfigs() (config.SandboxConfig, config.ExecConfig, config.NetworkConfig) {
 	sandboxCfg := config.SandboxConfig{
+		NodeID:           "test-node",
 		DefaultImage:     "alpine",
 		MaxSandboxes:     2,
 		DefaultCPUMillis: 1000, MaxCPUMillis: 2000,

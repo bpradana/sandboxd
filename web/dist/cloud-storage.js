@@ -85,15 +85,17 @@ export function setupCloudStorage({ toast, onChange }) {
 
   $("#cloud-storage-open").addEventListener("click", () => {
     $("#settings-form").hidden = true;
+    $("#images-settings").hidden = true;
     $("#cloud-storage-settings").hidden = false;
     $("#settings-api-open").setAttribute("aria-pressed", "false");
+    $("#images-open").setAttribute("aria-pressed", "false");
     $("#cloud-storage-open").setAttribute("aria-pressed", "true");
     load();
   });
   $("#cloud-auth-mode").addEventListener("change", () => { clearCredentials(); updateAuthentication(); });
   dialog.addEventListener("close", clearCredentials);
   window.addEventListener("pagehide", clearCredentials);
-  $("#settings-api-open").addEventListener("click", clearCredentials);
+  for (const id of ["#settings-api-open", "#images-open"]) $(id).addEventListener("click", clearCredentials);
 
   $("#cloud-test").addEventListener("click", async () => {
     if (busy) return;

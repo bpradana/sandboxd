@@ -76,7 +76,18 @@ func (s *service) PromoteSnapshot(ctx context.Context, id string, req presentati
 	if err != nil {
 		return nil, mapError(err)
 	}
+	// Publish the name so a host that has never held this image can build it
+	// from the same archive. The image exists here either way, so a storage
+	// failure here is reported but does not undo the import.
+	ref := snapshot.ImageRef{
+		Name: created.Name, SnapshotID: manifest.ID, Architecture: manifest.Architecture,
+		CreatedAt: created.CreatedAt, SizeBytes: manifest.SizeBytes,
+	}
+	if err := s.snapshots.PutImageRef(ctx, ref); err != nil {
+		s.logger.Warn("base image was built here but not published to cloud storage",
+			zap.String("image", created.Name), zap.Error(err))
+	}
 	s.logger.Info("promoted snapshot to base image",
 		zap.String("snapshot_id", manifest.ID), zap.String("image", created.Name))
-	return &presentation.ImageResponse{Name: created.Name, CreatedAt: created.CreatedAt}, nil
+	return &presentation.ImageResponse{Name: created.Name, CreatedAt: created.CreatedAt, Local: true}, nil
 }

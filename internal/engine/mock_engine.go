@@ -173,6 +173,21 @@ func (mr *MockEngineMockRecorder) Exits() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Exits", reflect.TypeOf((*MockEngine)(nil).Exits))
 }
 
+// HostCapacity mocks base method.
+func (m *MockEngine) HostCapacity() (*HostCapacity, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HostCapacity")
+	ret0, _ := ret[0].(*HostCapacity)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HostCapacity indicates an expected call of HostCapacity.
+func (mr *MockEngineMockRecorder) HostCapacity() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HostCapacity", reflect.TypeOf((*MockEngine)(nil).HostCapacity))
+}
+
 // Images mocks base method.
 func (m *MockEngine) Images(ctx context.Context) ([]Image, error) {
 	m.ctrl.T.Helper()
@@ -304,6 +319,20 @@ func (m *MockEngine) Remove(ctx context.Context, id, path string, recursive bool
 func (mr *MockEngineMockRecorder) Remove(ctx, id, path, recursive any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockEngine)(nil).Remove), ctx, id, path, recursive)
+}
+
+// RemoveImage mocks base method.
+func (m *MockEngine) RemoveImage(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveImage", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveImage indicates an expected call of RemoveImage.
+func (mr *MockEngineMockRecorder) RemoveImage(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveImage", reflect.TypeOf((*MockEngine)(nil).RemoveImage), ctx, name)
 }
 
 // SessionExec mocks base method.

@@ -44,6 +44,21 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// Capacity mocks base method.
+func (m *MockService) Capacity(ctx context.Context) (*presentation.CapacityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Capacity", ctx)
+	ret0, _ := ret[0].(*presentation.CapacityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Capacity indicates an expected call of Capacity.
+func (mr *MockServiceMockRecorder) Capacity(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Capacity", reflect.TypeOf((*MockService)(nil).Capacity), ctx)
+}
+
 // Changes mocks base method.
 func (m *MockService) Changes(ctx context.Context, id string) (*presentation.SandboxChangesResponse, error) {
 	m.ctrl.T.Helper()
@@ -324,6 +339,21 @@ func (mr *MockServiceMockRecorder) ListImages(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListImages", reflect.TypeOf((*MockService)(nil).ListImages), ctx)
 }
 
+// ListPreviews mocks base method.
+func (m *MockService) ListPreviews(ctx context.Context, id string) ([]preview.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPreviews", ctx, id)
+	ret0, _ := ret[0].([]preview.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPreviews indicates an expected call of ListPreviews.
+func (mr *MockServiceMockRecorder) ListPreviews(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPreviews", reflect.TypeOf((*MockService)(nil).ListPreviews), ctx, id)
+}
+
 // ListSessions mocks base method.
 func (m *MockService) ListSessions(ctx context.Context, id string) ([]presentation.SessionResponse, error) {
 	m.ctrl.T.Helper()
@@ -455,6 +485,20 @@ func (m *MockService) RemoveFile(ctx context.Context, id string, req presentatio
 func (mr *MockServiceMockRecorder) RemoveFile(ctx, id, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFile", reflect.TypeOf((*MockService)(nil).RemoveFile), ctx, id, req)
+}
+
+// RemoveImage mocks base method.
+func (m *MockService) RemoveImage(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveImage", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveImage indicates an expected call of RemoveImage.
+func (mr *MockServiceMockRecorder) RemoveImage(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveImage", reflect.TypeOf((*MockService)(nil).RemoveImage), ctx, name)
 }
 
 // RevokePreview mocks base method.

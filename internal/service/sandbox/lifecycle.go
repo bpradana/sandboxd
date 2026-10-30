@@ -24,18 +24,6 @@ import (
 // client disconnect cannot leave a half-built sandbox behind.
 const createTimeout = 2 * time.Minute
 
-func (s *service) ListImages(ctx context.Context) ([]presentation.ImageResponse, error) {
-	images, err := s.engine.Images(ctx)
-	if err != nil {
-		return nil, mapError(err)
-	}
-	result := make([]presentation.ImageResponse, 0, len(images))
-	for _, image := range images {
-		result = append(result, presentation.ImageResponse{Name: image.Name, CreatedAt: image.CreatedAt})
-	}
-	return result, nil
-}
-
 func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequest) (*presentation.SandboxResponse, error) {
 	if err := s.validateSnapshotPolicy(req.SnapshotPolicy); err != nil {
 		return nil, err
@@ -71,9 +59,7 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 	}
 
 	started := s.now()
-	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), createTimeout)
-	defer cancel()
-	info, err := s.engine.Create(createCtx, engine.Spec{
+	spec := engine.Spec{
 		ID:               sb.ID,
 		Image:            sb.Image,
 		Hostname:         "sandbox",
@@ -82,7 +68,23 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 		Env:              sb.Env,
 		SnapshotArchive:  archivePath,
 		SnapshotMaxBytes: s.snapshotCfg.MaxBytes,
-	})
+	}
+	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), createTimeout)
+	defer cancel()
+	info, err := s.engine.Create(createCtx, spec)
+	// An image this host has never held may still be one the cluster
+	// promoted. Fetch it once and try again, so where a sandbox is placed
+	// does not depend on which host happens to have which image.
+	if errors.Is(err, engine.ErrImageNotFound) && archivePath == "" {
+		if fetchErr := s.materializeImage(context.WithoutCancel(ctx), sb.Image); fetchErr == nil {
+			retryCtx, retryCancel := context.WithTimeout(context.WithoutCancel(ctx), createTimeout)
+			defer retryCancel()
+			info, err = s.engine.Create(retryCtx, spec)
+		} else {
+			s.logger.Ctx(ctx).Info("base image is not available here or in cloud storage",
+				zap.String("image", sb.Image), zap.Error(fetchErr))
+		}
+	}
 	if err != nil {
 		tracing.RecordError(span, err)
 		s.metrics.SandboxEvent("create_failed")
@@ -117,7 +119,7 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 		zap.String("network", sb.Network),
 		zap.Int("init_pid", info.InitPID),
 	)
-	return toSandboxResponse(updated), nil
+	return s.toSandboxResponse(updated), nil
 }
 
 // newSandbox applies defaults and enforces the configured maximums.
@@ -190,7 +192,7 @@ func (s *service) Get(ctx context.Context, id string) (*presentation.SandboxResp
 	if err != nil {
 		return nil, mapError(err)
 	}
-	resp := toSandboxResponse(sb)
+	resp := s.toSandboxResponse(sb)
 	if sb.State == consts.SandboxStateRunning {
 		// Stats are best effort on GET: the sandbox may be torn down concurrently.
 		if stats, err := s.engine.Stats(ctx, id); err == nil {
@@ -215,7 +217,7 @@ func (s *service) List(ctx context.Context, req presentation.ListSandboxesReques
 	}
 	result := make([]presentation.SandboxResponse, 0, len(sandboxes))
 	for _, sb := range sandboxes {
-		result = append(result, *toSandboxResponse(sb))
+		result = append(result, *s.toSandboxResponse(sb))
 	}
 	return result, nil
 }
@@ -252,7 +254,7 @@ func (s *service) Keepalive(ctx context.Context, id string, req presentation.Kee
 	if err != nil {
 		return nil, mapError(err)
 	}
-	return toSandboxResponse(updated), nil
+	return s.toSandboxResponse(updated), nil
 }
 
 func (s *service) Destroy(ctx context.Context, id string) error {

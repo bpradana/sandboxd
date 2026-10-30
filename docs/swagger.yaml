@@ -13,6 +13,18 @@ definitions:
         minimum: 1
         type: integer
     type: object
+  presentation.AllocatedResponse:
+    properties:
+      cpu_millis:
+        example: 3000
+        type: integer
+      memory_mb:
+        example: 1536
+        type: integer
+      storage_mb:
+        example: 1536
+        type: integer
+    type: object
   presentation.BuildInfoDoc:
     properties:
       build_time:
@@ -35,6 +47,59 @@ definitions:
         description: Version is formatted for the deployment environment.
         example: staging.3fa41bc
         type: string
+    type: object
+  presentation.CapacityEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.CapacityResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.CapacityResponse:
+    properties:
+      allocated:
+        $ref: '#/definitions/presentation.AllocatedResponse'
+      architecture:
+        example: arm64
+        type: string
+      host:
+        $ref: '#/definitions/presentation.HostCapacityResponse'
+      images:
+        example:
+        - alpine
+        - python-ready
+        items:
+          type: string
+        type: array
+      node:
+        example: sandboxd-1
+        type: string
+      ready:
+        description: |-
+          Ready is false when the engine failed its preflight checks, in which
+          case this host can report capacity it cannot actually use.
+        example: true
+        type: boolean
+      sandboxes:
+        $ref: '#/definitions/presentation.SandboxSlotsResponse'
+      snapshots:
+        description: |-
+          Snapshots reports whether cloud storage is configured. A host without
+          it cannot materialize an image it does not already have.
+        example: true
+        type: boolean
     type: object
   presentation.CloudStorageEnvelopeDoc:
     properties:
@@ -446,6 +511,27 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.HostCapacityResponse:
+    properties:
+      cpu_millis:
+        example: 8000
+        type: integer
+      memory_available_mb:
+        description: |-
+          MemoryAvailableMB is the kernel's estimate of what can still be
+          allocated without swapping, not simply unused memory.
+        example: 11020
+        type: integer
+      memory_mb:
+        example: 16384
+        type: integer
+      storage_free_mb:
+        example: 51200
+        type: integer
+      storage_total_mb:
+        example: 65536
+        type: integer
+    type: object
   presentation.ImageEnvelopeDoc:
     properties:
       code:
@@ -487,8 +573,21 @@ definitions:
     type: object
   presentation.ImageResponse:
     properties:
+      architecture:
+        description: |-
+          Architecture is set for an image held in cloud storage, which can only
+          be materialized on a host of the same architecture.
+        example: arm64
+        type: string
       created_at:
         type: string
+      local:
+        description: |-
+          Local reports whether this host already holds the image. One that is
+          not local is still usable: the first sandbox asking for it downloads
+          and imports it, which takes about as long as restoring a snapshot.
+        example: true
+        type: boolean
       name:
         example: alpine
         type: string
@@ -583,6 +682,26 @@ definitions:
         allOf:
         - $ref: '#/definitions/preview.Session'
         description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.PreviewListEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/preview.Session'
+        type: array
       entity:
         description: Entity identifies the API domain that produced the response.
         example: sandbox
@@ -779,6 +898,12 @@ definitions:
         type: string
       next_snapshot_at:
         type: string
+      node:
+        description: |-
+          Node is the daemon this sandbox lives on. A sandbox is kernel state on
+          one machine; anything routing across several needs to know which.
+        example: sandboxd-1
+        type: string
       snapshot_in_progress:
         type: boolean
       snapshot_policy:
@@ -793,6 +918,15 @@ definitions:
         type: string
       stopped_at:
         type: string
+    type: object
+  presentation.SandboxSlotsResponse:
+    properties:
+      active:
+        example: 3
+        type: integer
+      max:
+        example: 64
+        type: integer
     type: object
   presentation.SandboxStatsEnvelopeDoc:
     properties:
@@ -1133,6 +1267,32 @@ info:
   title: sandboxd API
   version: "1.0"
 paths:
+  /api/v1/capacity:
+    get:
+      description: 'Reports who this daemon is, whether its engine is usable, how
+        many sandbox slots are free, the limits already promised to running sandboxes,
+        what the machine underneath actually has, and which base images it can start
+        from. A sandbox is kernel state on one host, so anything placing work across
+        several daemons chooses from this rather than from scraped metrics. Promised
+        and actual capacity are reported separately: a daemon can be configured to
+        promise more than its host can deliver, and whether to allow that is the caller''s
+        decision.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: This daemon's capacity.
+          schema:
+            $ref: '#/definitions/presentation.CapacityEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Report this daemon's capacity
+      tags:
+      - sandboxes
   /api/v1/images:
     get:
       description: Lists the base root filesystems sandboxes can be created from.
@@ -1157,6 +1317,42 @@ paths:
       summary: List base images
       tags:
       - images
+  /api/v1/images/{name}:
+    delete:
+      description: Deletes a base image from this host, and from cloud storage if
+        it was promoted from a snapshot, so other hosts stop resolving the name. Sandboxes
+        already running on the image keep their own mount and are unaffected. Removing
+        a promoted image is also what frees the snapshot underneath it for deletion.
+      parameters:
+      - description: Image name.
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Image removed.
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "400":
+          description: Unusable image name.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: No such image here or in cloud storage.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Remove a base image
+      tags:
+      - sandboxes
   /api/v1/sandboxes:
     get:
       description: Lists sandboxes held by this server, including recently stopped
@@ -1781,6 +1977,43 @@ paths:
       summary: Extend a sandbox's lifetime
       tags:
       - sandboxes
+  /api/v1/sandboxes/{id}/previews:
+    get:
+      description: Reports the previews this daemon currently serves for the sandbox,
+        with the URL and port of each. Previews are state in the daemon that opened
+        them, like the sandbox itself, so anything routing across several daemons
+        rebuilds preview ownership by asking each of them rather than remembering
+        it.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Open previews.
+          schema:
+            $ref: '#/definitions/presentation.PreviewListEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running (sandbox_not_running).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List a sandbox's open previews
+      tags:
+      - previews
   /api/v1/sandboxes/{id}/sessions:
     get:
       parameters:

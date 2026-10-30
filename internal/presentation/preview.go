@@ -26,3 +26,5 @@ type ListeningPortResponse struct {
 }
 
 type ListeningPortsEnvelopeDoc = EnvelopeDoc[[]ListeningPortResponse]
+
+type PreviewListEnvelopeDoc = EnvelopeDoc[[]preview.Session]

@@ -27,10 +27,48 @@ import (
 type memorySnapshots struct {
 	mu          sync.Mutex
 	manifests   map[string]snapshot.Manifest
+	images      map[string]snapshot.ImageRef
 	data        []byte
 	uploadErr   error
 	downloadErr error
 	verified    bool
+}
+
+func (m *memorySnapshots) PutImageRef(_ context.Context, ref snapshot.ImageRef) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.images == nil {
+		m.images = map[string]snapshot.ImageRef{}
+	}
+	m.images[ref.Name] = ref
+	return nil
+}
+
+func (m *memorySnapshots) GetImageRef(_ context.Context, name string) (snapshot.ImageRef, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ref, ok := m.images[name]
+	if !ok {
+		return ref, snapshot.ErrNotFound
+	}
+	return ref, nil
+}
+
+func (m *memorySnapshots) ListImageRefs(context.Context) ([]snapshot.ImageRef, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	refs := make([]snapshot.ImageRef, 0, len(m.images))
+	for _, ref := range m.images {
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+func (m *memorySnapshots) DeleteImageRef(_ context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.images, name)
+	return nil
 }
 
 func (m *memorySnapshots) PutManifest(_ context.Context, item snapshot.Manifest) error {

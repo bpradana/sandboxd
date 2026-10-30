@@ -56,7 +56,7 @@ func (s *service) SetSnapshotPolicy(ctx context.Context, id string, policy model
 	if err != nil {
 		return nil, mapError(err)
 	}
-	return toSandboxResponse(sb), nil
+	return s.toSandboxResponse(sb), nil
 }
 
 // Automatic backups never overlap. Expiry backups run before TTL or idle

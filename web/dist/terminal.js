@@ -18,10 +18,10 @@ const encoder = new TextEncoder();
 const AUTO_REATTACH_DELAY_MS = 1000;
 
 const THEME = {
-  background: "#0b0d10",
+  background: "#101415",
   foreground: "#e6e8eb",
-  cursor: "#5eead4",
-  selectionBackground: "#2a3a44",
+  cursor: "#b3ebbc",
+  selectionBackground: "#304237",
   black: "#1b1f26",
   red: "#f87171",
   green: "#4ade80",
