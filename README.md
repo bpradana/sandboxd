@@ -63,6 +63,7 @@ $ curl -s -XPOST localhost:8080/api/v1/sandboxes/sbx-1f0c…/exec \
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Known limitations](#known-limitations)
+- [Yes, it runs DOOM](#yes-it-runs-doom)
 - [License](#license)
 
 ## Features
@@ -742,6 +743,34 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and the pull request proc
 - **Storage filesystems.** Disk storage has been exercised end to end with btrfs. ext4
   uses the same code path and is checked at startup; the CI workflow runs the
   end-to-end suite on GitHub's ext4-based runners.
+
+## Yes, it runs DOOM
+
+<div align="center">
+<img src="docs/assets/doom.png" alt="The sandboxd web console with DOOM's title screen in a sandbox's terminal, drawn in Unicode block characters, next to the sandbox list showing the running sandbox's CPU, memory, and disk usage" width="100%">
+<br><sub>Shareware DOOM, compiled from source inside a sandbox and played in the web console.</sub>
+</div>
+
+<br>
+
+Every sandbox is a Linux box you're root in, and the console is a real terminal, so of
+course someone had to try. [doom-ascii](https://github.com/wojciech-graj/doom-ascii)
+renders DOOM in Unicode block characters. It builds in a few seconds inside a sandbox,
+and you play it with the keyboard in a browser tab:
+
+```sh
+# In a console terminal, in a sandbox created with network "egress":
+apk add build-base git curl
+git clone --depth 1 https://github.com/wojciech-graj/doom-ascii && cd doom-ascii
+make
+# The shareware episode (DOOM1.WAD) is freely redistributable; bring your own copy:
+curl -fsSL -o _unix/game/DOOM1.WAD <url-of-doom1.wad>   # sha1 5b2e249b9c5133ec987b3ea77596381dc0d6bc1d
+cd _unix/game && ./doom-ascii -iwad DOOM1.WAD -chars block
+```
+
+Arrow keys move, Ctrl fires, Space opens doors, and Esc brings up the menu. The frame is
+about 160 columns wide, so widen or zoom out the browser if it wraps. There's no sound:
+a sandbox has no audio device, which, given the security model, is a feature.
 
 ## License
 
