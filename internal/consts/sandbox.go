@@ -2,13 +2,15 @@
 package consts
 
 // Sandbox lifecycle states. A sandbox only moves forward:
-// creating → running → stopping → stopped, or any state → failed.
+// creating → running → stopping → stopped, or running → snapshotting → stopped.
+// Failed snapshots retain their filesystem and can retry snapshotting.
 const (
-	SandboxStateCreating = "creating"
-	SandboxStateRunning  = "running"
-	SandboxStateStopping = "stopping"
-	SandboxStateStopped  = "stopped"
-	SandboxStateFailed   = "failed"
+	SandboxStateCreating     = "creating"
+	SandboxStateRunning      = "running"
+	SandboxStateSnapshotting = "snapshotting"
+	SandboxStateStopping     = "stopping"
+	SandboxStateStopped      = "stopped"
+	SandboxStateFailed       = "failed"
 )
 
 // Network modes. NetworkNone keeps only loopback; NetworkEgress adds a NATed
@@ -32,6 +34,7 @@ const (
 	StopReasonIdle     = "idle"
 	StopReasonShutdown = "shutdown"
 	StopReasonExited   = "init_exited"
+	StopReasonSnapshot = "snapshot"
 )
 
 // File types reported by the file API.

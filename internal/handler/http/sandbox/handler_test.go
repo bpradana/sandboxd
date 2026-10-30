@@ -38,8 +38,52 @@ func newApp(t *testing.T) (*fiber.App, *sandboxservice.MockService) {
 	app.Put("/sandboxes/:id/files", handler.UploadFile)
 	app.Post("/sandboxes/:id/sessions/:session_id/exec", handler.ExecSession)
 	app.Post("/sandboxes/:id/terminal/tickets", handler.CreateTerminalTicket)
+	app.Post("/sandboxes/:id/snapshots", handler.CreateSnapshot)
+	app.Get("/snapshots", handler.ListSnapshots)
+	app.Get("/snapshots/:id", handler.GetSnapshot)
+	app.Delete("/snapshots/:id", handler.DeleteSnapshot)
+	app.Get("/settings/cloud-storage", handler.GetCloudStorage)
+	app.Post("/settings/cloud-storage/test", handler.TestCloudStorage)
+	app.Put("/settings/cloud-storage", handler.SaveCloudStorage)
+	app.Delete("/settings/cloud-storage", handler.DisconnectCloudStorage)
 	app.Get("/sandboxes/:id/terminal", handler.OpenTerminal)
 	return app, service
+}
+
+func TestSnapshotEndpoints(t *testing.T) {
+	t.Parallel()
+	app, service := newApp(t)
+	id := "snap-0123456789abcdef01234567"
+	service.EXPECT().CreateSnapshot(gomock.Any(), "source", presentation.CreateSnapshotRequest{Labels: map[string]string{"task": "agent"}}).
+		Return(&presentation.SnapshotResponse{ID: id, Status: "capturing"}, nil)
+	res, payload := do(t, app, http.MethodPost, "/sandboxes/source/snapshots", `{"labels":{"task":"agent"}}`)
+	if res.StatusCode != http.StatusAccepted || payload.Entity != "snapshot" {
+		t.Fatalf("create status %d payload %+v", res.StatusCode, payload)
+	}
+	service.EXPECT().GetSnapshot(gomock.Any(), id).Return(&presentation.SnapshotResponse{ID: id, Status: "ready"}, nil)
+	res, _ = do(t, app, http.MethodGet, "/snapshots/"+id, "")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("get status %d", res.StatusCode)
+	}
+	service.EXPECT().ListSnapshots(gomock.Any()).Return([]presentation.SnapshotResponse{{ID: id, Status: "ready"}}, nil)
+	res, _ = do(t, app, http.MethodGet, "/snapshots", "")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("list status %d", res.StatusCode)
+	}
+	service.EXPECT().DeleteSnapshot(gomock.Any(), id).Return(nil)
+	res, _ = do(t, app, http.MethodDelete, "/snapshots/"+id, "")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("delete status %d", res.StatusCode)
+	}
+}
+
+func TestCreateSandboxRejectsImageWithSnapshot(t *testing.T) {
+	t.Parallel()
+	app, _ := newApp(t)
+	res, payload := do(t, app, http.MethodPost, "/sandboxes", `{"image":"alpine","snapshot_id":"snap-0123456789abcdef01234567"}`)
+	if res.StatusCode != http.StatusBadRequest || payload.ErrorCode != appctx.CodeValidation {
+		t.Fatalf("status %d payload %+v", res.StatusCode, payload)
+	}
 }
 
 type envelope struct {

@@ -64,6 +64,11 @@ jobs:
           -e SANDBOXD_E2E_INTERNET=1
           -e SANDBOXD_E2E_DETACH_TIMEOUT=15s
           sandboxd-test go test -v -count=1 -tags=e2e ./test/...
+      - name: Cloud snapshot round trip and daemon restart
+        run: >
+          docker compose run --rm -e SANDBOXD_E2E_SNAPSHOTS=1
+          sandboxd-test go test -v -count=1 -tags=e2e
+          -run TestSnapshotCloudRoundTrip ./test/...
       - name: Server logs
         if: failure()
         run: docker compose logs sandboxd

@@ -4,7 +4,9 @@ import "time"
 
 type CreateSandboxRequest struct {
 	// Image is the base root filesystem; defaults to SANDBOX_DEFAULT_IMAGE.
-	Image string `json:"image" validate:"omitempty,max=64" example:"alpine"`
+	Image string `json:"image" validate:"excluded_with=SnapshotID,omitempty,max=64" example:"alpine"`
+	// SnapshotID restores a full filesystem backup; mutually exclusive with image.
+	SnapshotID string `json:"snapshot_id" validate:"omitempty,max=64"`
 	// CPUMillis is the CPU quota in millicores (1000 = one full core).
 	CPUMillis int `json:"cpu_millis" validate:"omitempty,gte=10" example:"1000"`
 	// MemoryMB is the hard memory limit; exceeding it OOM-kills the sandbox's processes.
@@ -27,7 +29,7 @@ type CreateSandboxRequest struct {
 
 type ListSandboxesRequest struct {
 	// State filters by lifecycle state.
-	State string `query:"state" validate:"omitempty,oneof=creating running stopping stopped failed"`
+	State string `query:"state" validate:"omitempty,oneof=creating running snapshotting stopping stopped failed"`
 	// Label filters by one key=value label.
 	Label string `query:"label" validate:"omitempty,max=320"`
 }

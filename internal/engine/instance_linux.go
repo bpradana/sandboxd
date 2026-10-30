@@ -58,9 +58,12 @@ type instance struct {
 	done chan struct{}
 	// started is set once Create returned successfully; exits before that
 	// are reported through Create's error, not the Exits channel.
-	started    atomic.Bool
-	destroying atomic.Bool
-	teardownMu sync.Mutex
+	started      atomic.Bool
+	destroying   atomic.Bool
+	snapshotting atomic.Bool
+	teardownMu   sync.Mutex
+	// fsMu drains host-side file operations before a filesystem capture.
+	fsMu sync.RWMutex
 }
 
 func newInstance(spec Spec, dir string, maxConcurrent int) *instance {

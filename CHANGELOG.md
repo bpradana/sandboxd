@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Cloud filesystem snapshots: save and stop sandboxes to S3-compatible storage,
+  then restore their files and configuration into new sandboxes.
+- Cloud storage settings with encrypted access keys or server identity,
+  connection testing, and actionable connection errors.
 - Sandboxes built directly on Linux namespaces, cgroups v2, overlayfs, seccomp, and
   capabilities, in a single static Go binary with no external container runtime.
 - REST API for sandbox lifecycle, one-shot and streamed exec, persistent shell

@@ -2,10 +2,12 @@ package sandbox
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/bpradana/sandboxd/internal/appctx"
 	"github.com/bpradana/sandboxd/internal/engine"
 	sandboxrepository "github.com/bpradana/sandboxd/internal/repository/sandbox"
+	"github.com/bpradana/sandboxd/internal/snapshot"
 )
 
 // mapError turns engine and repository sentinels into client-facing
@@ -20,6 +22,12 @@ func mapError(err error) error {
 
 	var mapped *appctx.HTTPError
 	switch {
+	case errors.Is(err, snapshot.ErrNotFound):
+		mapped = appctx.NewHTTPError(http.StatusNotFound, "snapshot not found").WithErrorCode(appctx.CodeSnapshotNotFound)
+	case errors.Is(err, snapshot.ErrInvalidID), errors.Is(err, snapshot.ErrCorrupt):
+		mapped = appctx.NewHTTPError(http.StatusBadRequest, "invalid snapshot id or archive").WithErrorCode(appctx.CodeSnapshotInvalid)
+	case errors.Is(err, snapshot.ErrTooLarge):
+		mapped = appctx.ErrLimitExceeded("snapshot exceeds maximum allowed size")
 	case errors.Is(err, engine.ErrSandboxNotFound), errors.Is(err, sandboxrepository.ErrNotFound):
 		mapped = appctx.ErrSandboxNotFound()
 	case errors.Is(err, engine.ErrImageNotFound):

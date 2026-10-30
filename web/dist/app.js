@@ -3,6 +3,7 @@
 
 import { api, engineReady, getAPIKey, setAPIKey } from "./api.js";
 import { TerminalSession } from "./terminal.js";
+import { setupCloudStorage } from "./cloud-storage.js";
 
 const POLL_INTERVAL_MS = 3000;
 // Open terminal tabs, so a reloaded page reattaches to their shells.
@@ -20,6 +21,10 @@ const state = {
   terminalCounters: new Map(),
   // Set after an auth failure was reported, so polling does not repeat it.
   authWarned: false,
+  snapshotsEnabled: false,
+  snapshots: [],
+  snapshotRefreshPending: false,
+  snapshotsPolledAt: 0,
 };
 
 // ---------- small DOM helpers ----------
@@ -168,9 +173,14 @@ function renderSandbox(sb) {
           { class: "actions" },
           el("button", { class: "btn small primary", type: "button", onclick: () => openTerminal(sb.id) }, "Terminal"),
           el("button", { class: "btn small", type: "button", onclick: () => keepalive(sb.id) }, "Keepalive"),
+          state.snapshotsEnabled ? el("button", { class: "btn small", type: "button", onclick: (event) => saveSnapshot(sb.id, event.currentTarget) }, "Save & stop") : null,
           el("button", { class: "btn small danger", type: "button", onclick: () => killSandbox(sb.id) }, "Kill"),
         )
-      : null,
+      : state.snapshotsEnabled && sb.state === "failed" && sb.stop_reason === "snapshot" && !sb.stopped_at
+        ? el("div", { class: "actions" },
+          el("button", { class: "btn small", type: "button", onclick: (event) => saveSnapshot(sb.id, event.currentTarget) }, "Retry save"),
+          el("button", { class: "btn small danger", type: "button", onclick: () => killSandbox(sb.id) }, "Delete source"))
+        : null,
   );
 }
 
@@ -250,6 +260,86 @@ async function killSandbox(id) {
     toast(`Kill failed: ${err.message}`, "error");
   }
   refreshSandboxes();
+}
+
+// ---------- filesystem snapshots ----------
+
+async function refreshSnapshots(force = false) {
+  if (state.snapshotRefreshPending) return;
+  const interval = state.snapshots.some((item) => item.status === "capturing" || item.status === "uploading") ? 10000 : 60000;
+  if (!force && Date.now() - state.snapshotsPolledAt < interval) return;
+  state.snapshotRefreshPending = true;
+  state.snapshotsPolledAt = Date.now();
+  try {
+    state.snapshots = (await api("GET", "/snapshots")) || [];
+    state.snapshotsEnabled = true;
+    $("#snapshots-panel").hidden = false;
+    $("#snapshots-status").textContent = state.snapshots.length ? "Restore creates a new sandbox with a fresh lifetime." : "Save a sandbox to restore its files later.";
+    $("#snapshot-list").replaceChildren(...state.snapshots.map(renderSnapshot));
+    renderSandboxes();
+  } catch (err) {
+    if (err.code === "snapshot_disabled") {
+      state.snapshotsEnabled = false;
+      state.snapshots = [];
+      $("#snapshot-list").replaceChildren();
+      $("#snapshots-panel").hidden = true;
+      renderSandboxes();
+    } else if (err.code === "snapshot_storage_unavailable") {
+      $("#snapshots-panel").hidden = false;
+      $("#snapshots-status").textContent = "Cloud storage is unavailable. Check the server's snapshot configuration.";
+    } else if (state.snapshotsEnabled) {
+      $("#snapshots-status").textContent = "Snapshot status unavailable. Displayed data may be out of date.";
+    }
+  } finally { state.snapshotRefreshPending = false; }
+}
+
+function renderSnapshot(item) {
+  const ready = item.status === "ready";
+  const finished = ready || item.status === "failed";
+  return el("li", { class: "sandbox" },
+    el("div", { class: "sandbox-top" },
+      el("span", { class: "sandbox-id", title: item.id }, shortID(item.id)),
+      el("span", { class: `badge ${item.status}` }, item.status)),
+    el("div", { class: "sandbox-meta" },
+      [shortID(item.sandbox_id), item.architecture, item.size_bytes ? formatBytes(item.size_bytes) : "", new Date(item.created_at).toLocaleString()].filter(Boolean).join(" · ")),
+    item.failure_reason ? el("div", { class: "sandbox-meta" }, item.failure_reason) : null,
+    el("div", { class: "actions" },
+      ready ? el("button", { class: "btn small primary", type: "button", onclick: (event) => restoreSnapshot(item.id, event.currentTarget) }, "Restore") : null,
+      finished ? el("button", { class: "btn small danger", type: "button", onclick: (event) => deleteSnapshot(item.id, event.currentTarget) }, "Delete backup") : null));
+}
+
+async function saveSnapshot(id, button) {
+  if (!window.confirm(`Save and stop sandbox ${id}? Running commands and terminals will end. Files will be backed up to cloud storage.`)) return;
+  button.disabled = true;
+  try {
+    await api("POST", `/sandboxes/${encodeURIComponent(id)}/snapshots`, {});
+    toast("Snapshot started. The sandbox is stopping.");
+    await Promise.all([refreshSandboxes(), refreshSnapshots(true)]);
+  } catch (err) { toast(`Save failed: ${err.message}`, "error"); }
+  finally { button.disabled = false; }
+}
+
+async function restoreSnapshot(id, button) {
+  button.disabled = true;
+  button.textContent = "Restoring…";
+  try {
+    const sb = await api("POST", "/sandboxes", { snapshot_id: id });
+    toast(`Restored ${shortID(sb.id)}`);
+    await refreshSandboxes();
+    openTerminal(sb.id);
+  } catch (err) { toast(`Restore failed: ${err.message}`, "error"); }
+  finally { button.disabled = false; button.textContent = "Restore"; }
+}
+
+async function deleteSnapshot(id, button) {
+  if (!window.confirm(`Delete backup ${id}? This removes its saved filesystem from cloud storage.`)) return;
+  button.disabled = true;
+  try {
+    await api("DELETE", `/snapshots/${encodeURIComponent(id)}`);
+    toast("Backup deleted");
+    await refreshSnapshots(true);
+  } catch (err) { toast(`Delete failed: ${err.message}`, "error"); }
+  finally { button.disabled = false; }
 }
 
 // ---------- terminals ----------
@@ -347,16 +437,28 @@ function closeTerminal(entry) {
 function setupSettings() {
   const dialog = $("#settings");
   const input = $("#api-key");
+  const showAPI = () => {
+    $("#settings-form").hidden = false;
+    $("#cloud-storage-settings").hidden = true;
+    $("#settings-api-open").setAttribute("aria-pressed", "true");
+    $("#cloud-storage-open").setAttribute("aria-pressed", "false");
+  };
   $("#settings-open").addEventListener("click", () => {
+    showAPI();
+    dialog.returnValue = "";
     input.value = getAPIKey();
     dialog.showModal();
   });
+  $("#settings-close").addEventListener("click", () => dialog.close("cancel"));
+  $("#settings-api-open").addEventListener("click", showAPI);
+  setupCloudStorage({ toast, onChange: () => refreshSnapshots(true) });
   dialog.addEventListener("close", () => {
     if (dialog.returnValue !== "save") return;
     setAPIKey(input.value.trim());
     toast(input.value.trim() ? "API key saved" : "API key cleared");
     loadImages();
     refreshSandboxes();
+    refreshSnapshots(true);
   });
 }
 
@@ -368,11 +470,13 @@ function start() {
   refreshEngineStatus();
   loadImages();
   refreshSandboxes();
+  refreshSnapshots();
   for (const saved of savedTerminals()) openTerminal(saved.sandboxID, saved);
   setInterval(() => {
     if (document.hidden) return;
     refreshSandboxes();
     refreshEngineStatus();
+    refreshSnapshots();
   }, POLL_INTERVAL_MS);
 }
 

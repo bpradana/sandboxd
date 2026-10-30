@@ -23,6 +23,87 @@ definitions:
         example: staging.3fa41bc
         type: string
     type: object
+  presentation.CloudStorageEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.CloudStorageResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.CloudStorageRequest:
+    properties:
+      access_key_id:
+        maxLength: 256
+        type: string
+      auth_mode:
+        enum:
+        - access_keys
+        - server_identity
+        type: string
+      bucket:
+        maxLength: 255
+        type: string
+      endpoint:
+        maxLength: 2048
+        type: string
+      path_style:
+        type: boolean
+      prefix:
+        maxLength: 1024
+        type: string
+      region:
+        maxLength: 64
+        type: string
+      secret_access_key:
+        maxLength: 4096
+        type: string
+      session_token:
+        maxLength: 16384
+        type: string
+      use_saved_credentials:
+        description: UseSavedCredentials explicitly reuses the daemon's encrypted
+          access keys.
+        type: boolean
+    required:
+    - auth_mode
+    - bucket
+    - region
+    type: object
+  presentation.CloudStorageResponse:
+    properties:
+      auth_mode:
+        type: string
+      bucket:
+        type: string
+      connected:
+        type: boolean
+      endpoint:
+        type: string
+      has_saved_credentials:
+        type: boolean
+      path_style:
+        type: boolean
+      prefix:
+        type: string
+      region:
+        type: string
+      source:
+        type: string
+      updated_at:
+        type: string
+    type: object
   presentation.CreateSandboxRequest:
     properties:
       cpu_millis:
@@ -70,6 +151,11 @@ definitions:
         example: 256
         minimum: 8
         type: integer
+      snapshot_id:
+        description: SnapshotID restores a full filesystem backup; mutually exclusive
+          with image.
+        maxLength: 64
+        type: string
       storage_mb:
         description: StorageMB caps the writable layer; writes beyond it fail with
           ENOSPC.
@@ -111,6 +197,13 @@ definitions:
         - sandbox
         example: root
         type: string
+    type: object
+  presentation.CreateSnapshotRequest:
+    properties:
+      labels:
+        additionalProperties:
+          type: string
+        type: object
     type: object
   presentation.EmptyEnvelopeDoc:
     type: object
@@ -616,6 +709,68 @@ definitions:
         example: root
         type: string
     type: object
+  presentation.SnapshotEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.SnapshotResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SnapshotListEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.SnapshotResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SnapshotResponse:
+    properties:
+      architecture:
+        type: string
+      created_at:
+        type: string
+      failure_reason:
+        type: string
+      id:
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      sandbox_id:
+        type: string
+      sha256:
+        type: string
+      size_bytes:
+        type: integer
+      status:
+        type: string
+    type: object
   presentation.TerminalControlMessage:
     properties:
       cols:
@@ -759,10 +914,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates an isolated environment (user, mount, pid, net, uts, ipc
-        and cgroup namespaces; cgroup v2 limits; overlay root on a size-capped tmpfs;
-        seccomp) and waits until it is running. Omitted limits use the server defaults;
-        values above the server maximums are rejected.
+      description: |-
+        Creates an isolated environment (user, mount, pid, net, uts, ipc and cgroup namespaces; cgroup v2 limits; overlay root on a size-capped tmpfs; seccomp) and waits until it is running. Omitted limits use the server defaults; values above the server maximums are rejected.
+        Set snapshot_id instead of image to restore a ready cloud filesystem backup. Saved resource limits, network, environment and labels are inherited unless overridden; TTL starts fresh. Processes and terminal sessions are not restored.
       parameters:
       - description: Sandbox specification.
         in: body
@@ -1463,6 +1617,61 @@ paths:
       summary: Run a command in a shell session
       tags:
       - sessions
+  /api/v1/sandboxes/{id}/snapshots:
+    post:
+      consumes:
+      - application/json
+      description: Stops sandbox processes and asynchronously backs up the complete
+        filesystem to S3-compatible storage. A failed backup retains the source filesystem
+        for retry. Poll the snapshot until ready before restoring. Processes and terminals
+        are not saved.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Snapshot labels.
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/presentation.CreateSnapshotRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/presentation.SnapshotEnvelopeDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Save a filesystem snapshot and stop the sandbox
+      tags:
+      - snapshots
   /api/v1/sandboxes/{id}/stats:
     get:
       description: Returns cgroup memory, CPU, process, and OOM counters plus writable-layer
@@ -1618,6 +1827,229 @@ paths:
       summary: Issue a terminal ticket
       tags:
       - terminal
+  /api/v1/settings/cloud-storage:
+    delete:
+      description: Does not delete cloud backups. Persists across restarts, including
+        when environment-based snapshot configuration exists. Refused while snapshot
+        operations use the connection.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Disconnect cloud storage and forget saved credentials
+      tags:
+      - snapshots
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.CloudStorageEnvelopeDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Get cloud storage connection settings without credentials
+      tags:
+      - snapshots
+    put:
+      consumes:
+      - application/json
+      description: Takes effect immediately and survives daemon restarts. Refused
+        while snapshot operations use the current connection. Saved settings take
+        precedence over environment configuration.
+      parameters:
+      - description: Connection details. Credentials are never returned.
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.CloudStorageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.CloudStorageEnvelopeDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Test and save an encrypted deployment-wide cloud storage connection
+      tags:
+      - snapshots
+  /api/v1/settings/cloud-storage/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Connection details. Credentials are never returned.
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.CloudStorageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Test cloud list, write, read and delete permissions without saving
+      tags:
+      - snapshots
+  /api/v1/snapshots:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.SnapshotListEnvelopeDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List cloud filesystem snapshots
+      tags:
+      - snapshots
+  /api/v1/snapshots/{id}:
+    delete:
+      parameters:
+      - description: Snapshot ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Delete a snapshot archive and its cloud manifest
+      tags:
+      - snapshots
+    get:
+      parameters:
+      - description: Snapshot ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.SnapshotEnvelopeDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Get snapshot progress and metadata
+      tags:
+      - snapshots
   /healthz:
     get:
       description: Returns 204 when the process is alive.
@@ -1669,3 +2101,6 @@ tags:
   name: sessions
 - description: File upload, download, listing, and management inside a sandbox.
   name: files
+- description: Save-and-stop filesystem backups in S3-compatible storage and restore
+    into new sandboxes.
+  name: snapshots

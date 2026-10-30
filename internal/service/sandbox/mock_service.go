@@ -15,7 +15,6 @@ import (
 	reflect "reflect"
 
 	presentation "github.com/bpradana/sandboxd/internal/presentation"
-
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -87,6 +86,21 @@ func (mr *MockServiceMockRecorder) CreateSession(ctx, id, req any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSession", reflect.TypeOf((*MockService)(nil).CreateSession), ctx, id, req)
 }
 
+// CreateSnapshot mocks base method.
+func (m *MockService) CreateSnapshot(ctx context.Context, id string, req presentation.CreateSnapshotRequest) (*presentation.SnapshotResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateSnapshot", ctx, id, req)
+	ret0, _ := ret[0].(*presentation.SnapshotResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateSnapshot indicates an expected call of CreateSnapshot.
+func (mr *MockServiceMockRecorder) CreateSnapshot(ctx, id, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSnapshot", reflect.TypeOf((*MockService)(nil).CreateSnapshot), ctx, id, req)
+}
+
 // CreateTerminalTicket mocks base method.
 func (m *MockService) CreateTerminalTicket(ctx context.Context, id string) (*presentation.TerminalTicketResponse, error) {
 	m.ctrl.T.Helper()
@@ -102,6 +116,20 @@ func (mr *MockServiceMockRecorder) CreateTerminalTicket(ctx, id any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTerminalTicket", reflect.TypeOf((*MockService)(nil).CreateTerminalTicket), ctx, id)
 }
 
+// DeleteSnapshot mocks base method.
+func (m *MockService) DeleteSnapshot(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSnapshot", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteSnapshot indicates an expected call of DeleteSnapshot.
+func (mr *MockServiceMockRecorder) DeleteSnapshot(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSnapshot", reflect.TypeOf((*MockService)(nil).DeleteSnapshot), ctx, id)
+}
+
 // Destroy mocks base method.
 func (m *MockService) Destroy(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -114,6 +142,20 @@ func (m *MockService) Destroy(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) Destroy(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Destroy", reflect.TypeOf((*MockService)(nil).Destroy), ctx, id)
+}
+
+// DisconnectCloudStorage mocks base method.
+func (m *MockService) DisconnectCloudStorage(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisconnectCloudStorage", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DisconnectCloudStorage indicates an expected call of DisconnectCloudStorage.
+func (mr *MockServiceMockRecorder) DisconnectCloudStorage(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisconnectCloudStorage", reflect.TypeOf((*MockService)(nil).DisconnectCloudStorage), ctx)
 }
 
 // Exec mocks base method.
@@ -158,6 +200,36 @@ func (m *MockService) Get(ctx context.Context, id string) (*presentation.Sandbox
 func (mr *MockServiceMockRecorder) Get(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockService)(nil).Get), ctx, id)
+}
+
+// GetCloudStorage mocks base method.
+func (m *MockService) GetCloudStorage(ctx context.Context) (*presentation.CloudStorageResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCloudStorage", ctx)
+	ret0, _ := ret[0].(*presentation.CloudStorageResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCloudStorage indicates an expected call of GetCloudStorage.
+func (mr *MockServiceMockRecorder) GetCloudStorage(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloudStorage", reflect.TypeOf((*MockService)(nil).GetCloudStorage), ctx)
+}
+
+// GetSnapshot mocks base method.
+func (m *MockService) GetSnapshot(ctx context.Context, id string) (*presentation.SnapshotResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSnapshot", ctx, id)
+	ret0, _ := ret[0].(*presentation.SnapshotResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSnapshot indicates an expected call of GetSnapshot.
+func (mr *MockServiceMockRecorder) GetSnapshot(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSnapshot", reflect.TypeOf((*MockService)(nil).GetSnapshot), ctx, id)
 }
 
 // Keepalive mocks base method.
@@ -235,6 +307,21 @@ func (mr *MockServiceMockRecorder) ListSessions(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSessions", reflect.TypeOf((*MockService)(nil).ListSessions), ctx, id)
 }
 
+// ListSnapshots mocks base method.
+func (m *MockService) ListSnapshots(ctx context.Context) ([]presentation.SnapshotResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListSnapshots", ctx)
+	ret0, _ := ret[0].([]presentation.SnapshotResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListSnapshots indicates an expected call of ListSnapshots.
+func (mr *MockServiceMockRecorder) ListSnapshots(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSnapshots", reflect.TypeOf((*MockService)(nil).ListSnapshots), ctx)
+}
+
 // Mkdir mocks base method.
 func (m *MockService) Mkdir(ctx context.Context, id string, req presentation.MkdirRequest) (*presentation.FileInfoResponse, error) {
 	m.ctrl.T.Helper()
@@ -308,6 +395,21 @@ func (mr *MockServiceMockRecorder) RemoveFile(ctx, id, req any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFile", reflect.TypeOf((*MockService)(nil).RemoveFile), ctx, id, req)
 }
 
+// SaveCloudStorage mocks base method.
+func (m *MockService) SaveCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) (*presentation.CloudStorageResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveCloudStorage", ctx, req)
+	ret0, _ := ret[0].(*presentation.CloudStorageResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SaveCloudStorage indicates an expected call of SaveCloudStorage.
+func (mr *MockServiceMockRecorder) SaveCloudStorage(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveCloudStorage", reflect.TypeOf((*MockService)(nil).SaveCloudStorage), ctx, req)
+}
+
 // SessionExec mocks base method.
 func (m *MockService) SessionExec(ctx context.Context, id, sessionID string, req presentation.SessionExecRequest) (*presentation.ExecResponse, error) {
 	m.ctrl.T.Helper()
@@ -366,6 +468,20 @@ func (m *MockService) Terminal(ctx context.Context, id string, req presentation.
 func (mr *MockServiceMockRecorder) Terminal(ctx, id, req, input, out, attached any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminal", reflect.TypeOf((*MockService)(nil).Terminal), ctx, id, req, input, out, attached)
+}
+
+// TestCloudStorage mocks base method.
+func (m *MockService) TestCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TestCloudStorage", ctx, req)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TestCloudStorage indicates an expected call of TestCloudStorage.
+func (mr *MockServiceMockRecorder) TestCloudStorage(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestCloudStorage", reflect.TypeOf((*MockService)(nil).TestCloudStorage), ctx, req)
 }
 
 // WriteFile mocks base method.

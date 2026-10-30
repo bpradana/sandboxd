@@ -2,10 +2,12 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/bpradana/sandboxd/internal/appctx"
 	"github.com/bpradana/sandboxd/internal/consts"
 	"github.com/bpradana/sandboxd/internal/helper/safego"
 	"github.com/bpradana/sandboxd/internal/observability/tracing"
@@ -54,7 +56,7 @@ func (s *service) reapOnce(ctx context.Context) {
 	ctx, span := tracing.SpanStartDetached(ctx, "service.sandbox.Reap")
 	defer span.End()
 
-	running, err := s.repo.List(ctx, sandboxrepository.Filter{State: consts.SandboxStateRunning})
+	running, err := s.repo.List(ctx, sandboxrepository.Filter{})
 	if err != nil {
 		tracing.RecordError(span, err)
 		return
@@ -66,6 +68,9 @@ func (s *service) reapOnce(ctx context.Context) {
 	done := make(chan struct{})
 	pending := 0
 	for _, sb := range running {
+		if sb.State != consts.SandboxStateRunning && (sb.State != consts.SandboxStateFailed || !sb.Active()) {
+			continue
+		}
 		var reason string
 		switch {
 		case now.After(sb.ExpiresAt):
@@ -125,6 +130,10 @@ func (s *service) handleExit(ctx context.Context, id string, cause error) {
 	}
 	s.logger.Ctx(ctx).Warn("sandbox init exited unexpectedly", zap.String("sandbox_id", id), zap.Error(cause))
 	if err := s.destroy(ctx, id, consts.StopReasonExited); err != nil {
+		var httpErr *appctx.HTTPError
+		if errors.As(err, &httpErr) && httpErr.ErrorCode() == appctx.CodeSnapshotNotReady {
+			return
+		}
 		s.logger.Ctx(ctx).Warn("cleanup exited sandbox", zap.String("sandbox_id", id), zap.Error(err))
 	}
 	s.markStopped(ctx, id, consts.SandboxStateFailed, consts.StopReasonExited, message)

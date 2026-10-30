@@ -15,11 +15,19 @@ const (
 	CodeForbidden = "forbidden" // e.g. a terminal upgrade from a foreign Origin
 
 	// not found (404)
-	CodeSandboxNotFound  = "sandbox_not_found"
-	CodeSessionNotFound  = "session_not_found"
-	CodeTerminalNotFound = "terminal_not_found" // ended, timed out while detached, or never existed
-	CodeImageNotFound    = "image_not_found"
-	CodePathNotFound     = "path_not_found"
+	CodeSandboxNotFound        = "sandbox_not_found"
+	CodeSessionNotFound        = "session_not_found"
+	CodeTerminalNotFound       = "terminal_not_found" // ended, timed out while detached, or never existed
+	CodeImageNotFound          = "image_not_found"
+	CodePathNotFound           = "path_not_found"
+	CodeSnapshotNotFound       = "snapshot_not_found"
+	CodeSnapshotNotReady       = "snapshot_not_ready"
+	CodeSnapshotDisabled       = "snapshot_disabled"
+	CodeSnapshotLimitReached   = "snapshot_limit_reached"
+	CodeSnapshotInvalid        = "snapshot_invalid"
+	CodeSnapshotStorage        = "snapshot_storage_unavailable"
+	CodeCloudStorageBusy       = "cloud_storage_busy"
+	CodeCloudStorageTestFailed = "cloud_storage_test_failed"
 
 	// conflict (409)
 	CodeSandboxNotRunning = "sandbox_not_running" // sandbox is creating, stopping, or gone

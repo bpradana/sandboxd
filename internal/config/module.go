@@ -12,4 +12,5 @@ var Module = fx.Options(
 	fx.Provide(func(cfg Config) SandboxConfig { return cfg.Sandbox }),
 	fx.Provide(func(cfg Config) ExecConfig { return cfg.Exec }),
 	fx.Provide(func(cfg Config) NetworkConfig { return cfg.Network }),
+	fx.Provide(func(cfg Config) SnapshotConfig { return cfg.Snapshot }),
 )

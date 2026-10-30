@@ -112,7 +112,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates an isolated environment (user, mount, pid, net, uts, ipc and cgroup namespaces; cgroup v2 limits; overlay root on a size-capped tmpfs; seccomp) and waits until it is running. Omitted limits use the server defaults; values above the server maximums are rejected.",
+                "description": "Creates an isolated environment (user, mount, pid, net, uts, ipc and cgroup namespaces; cgroup v2 limits; overlay root on a size-capped tmpfs; seccomp) and waits until it is running. Omitted limits use the server defaults; values above the server maximums are rejected.\nSet snapshot_id instead of image to restore a ready cloud filesystem backup. Saved resource limits, network, environment and labels are inherited unless overridden; TTL starts fresh. Processes and terminal sessions are not restored.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1160,6 +1160,87 @@
                 }
             }
         },
+        "/api/v1/sandboxes/{id}/snapshots": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Stops sandbox processes and asynchronously backs up the complete filesystem to S3-compatible storage. A failed backup retains the source filesystem for retry. Poll the snapshot until ready before restoring. Processes and terminals are not saved.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Save a filesystem snapshot and stop the sandbox",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Snapshot labels.",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CreateSnapshotRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SnapshotEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/sandboxes/{id}/stats": {
             "get": {
                 "security": [
@@ -1375,6 +1456,354 @@
                 }
             }
         },
+        "/api/v1/settings/cloud-storage": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Get cloud storage connection settings without credentials",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CloudStorageEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Takes effect immediately and survives daemon restarts. Refused while snapshot operations use the current connection. Saved settings take precedence over environment configuration.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Test and save an encrypted deployment-wide cloud storage connection",
+                "parameters": [
+                    {
+                        "description": "Connection details. Credentials are never returned.",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CloudStorageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CloudStorageEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Does not delete cloud backups. Persists across restarts, including when environment-based snapshot configuration exists. Refused while snapshot operations use the connection.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Disconnect cloud storage and forget saved credentials",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.EmptyEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/settings/cloud-storage/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Test cloud list, write, read and delete permissions without saving",
+                "parameters": [
+                    {
+                        "description": "Connection details. Credentials are never returned.",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CloudStorageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.EmptyEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/snapshots": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "List cloud filesystem snapshots",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SnapshotListEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/snapshots/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Get snapshot progress and metadata",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SnapshotEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Delete a snapshot archive and its cloud manifest",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.EmptyEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/healthz": {
             "get": {
                 "description": "Returns 204 when the process is alive.",
@@ -1447,6 +1876,121 @@
                 }
             }
         },
+        "presentation.CloudStorageEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.CloudStorageResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.CloudStorageRequest": {
+            "type": "object",
+            "required": [
+                "auth_mode",
+                "bucket",
+                "region"
+            ],
+            "properties": {
+                "access_key_id": {
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "auth_mode": {
+                    "type": "string",
+                    "enum": [
+                        "access_keys",
+                        "server_identity"
+                    ]
+                },
+                "bucket": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "endpoint": {
+                    "type": "string",
+                    "maxLength": 2048
+                },
+                "path_style": {
+                    "type": "boolean"
+                },
+                "prefix": {
+                    "type": "string",
+                    "maxLength": 1024
+                },
+                "region": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "secret_access_key": {
+                    "type": "string",
+                    "maxLength": 4096
+                },
+                "session_token": {
+                    "type": "string",
+                    "maxLength": 16384
+                },
+                "use_saved_credentials": {
+                    "description": "UseSavedCredentials explicitly reuses the daemon's encrypted access keys.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "presentation.CloudStorageResponse": {
+            "type": "object",
+            "properties": {
+                "auth_mode": {
+                    "type": "string"
+                },
+                "bucket": {
+                    "type": "string"
+                },
+                "connected": {
+                    "type": "boolean"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "has_saved_credentials": {
+                    "type": "boolean"
+                },
+                "path_style": {
+                    "type": "boolean"
+                },
+                "prefix": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "presentation.CreateSandboxRequest": {
             "type": "object",
             "properties": {
@@ -1503,6 +2047,11 @@
                     "minimum": 8,
                     "example": 256
                 },
+                "snapshot_id": {
+                    "description": "SnapshotID restores a full filesystem backup; mutually exclusive with image.",
+                    "type": "string",
+                    "maxLength": 64
+                },
                 "storage_mb": {
                     "description": "StorageMB caps the writable layer; writes beyond it fail with ENOSPC.",
                     "type": "integer",
@@ -1550,6 +2099,17 @@
                         "sandbox"
                     ],
                     "example": "root"
+                }
+            }
+        },
+        "presentation.CreateSnapshotRequest": {
+            "type": "object",
+            "properties": {
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -2240,6 +2800,96 @@
                 }
             }
         },
+        "presentation.SnapshotEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.SnapshotResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SnapshotListEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.SnapshotResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SnapshotResponse": {
+            "type": "object",
+            "properties": {
+                "architecture": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "failure_reason": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "sandbox_id": {
+                    "type": "string"
+                },
+                "sha256": {
+                    "type": "string"
+                },
+                "size_bytes": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "presentation.TerminalControlMessage": {
             "type": "object",
             "properties": {
@@ -2368,6 +3018,10 @@
         {
             "description": "File upload, download, listing, and management inside a sandbox.",
             "name": "files"
+        },
+        {
+            "description": "Save-and-stop filesystem backups in S3-compatible storage and restore into new sandboxes.",
+            "name": "snapshots"
         }
     ]
 }

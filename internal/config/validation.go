@@ -3,10 +3,28 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
+	"path/filepath"
 	"strings"
 
 	"github.com/bpradana/sandboxd/internal/helper/validation"
 )
+
+func validateSnapshotConfig(cfg SnapshotConfig) error {
+	if cfg.Enabled && (strings.TrimSpace(cfg.Bucket) == "" || strings.TrimSpace(cfg.Region) == "") {
+		return fmt.Errorf("SNAPSHOT_S3_BUCKET and SNAPSHOT_S3_REGION must be provided")
+	}
+	if cfg.Endpoint != "" {
+		u, err := url.Parse(cfg.Endpoint)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("SNAPSHOT_S3_ENDPOINT must be an http(s) URL without credentials, query, or fragment")
+		}
+	}
+	if !filepath.IsAbs(cfg.TempDir) || !filepath.IsAbs(cfg.SettingsDir) || cfg.Timeout <= 0 || cfg.MaxConcurrent <= 0 || cfg.MaxBytes <= 0 || cfg.MaxBytes > 4<<30 {
+		return fmt.Errorf("snapshot temp directory must be absolute, timeout and concurrency positive, and SNAPSHOT_MAX_BYTES between 1 and 4294967296")
+	}
+	return nil
+}
 
 func isProductionEnvironment(environment string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(environment)), "production")

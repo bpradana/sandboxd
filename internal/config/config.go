@@ -15,6 +15,23 @@ type Config struct {
 	Sandbox   SandboxConfig
 	Exec      ExecConfig
 	Network   NetworkConfig
+	Snapshot  SnapshotConfig
+}
+
+// SnapshotConfig configures full filesystem backups in S3-compatible storage.
+// Credentials come from the AWS SDK's daemon-side credential chain.
+type SnapshotConfig struct {
+	Enabled       bool
+	Bucket        string
+	Region        string
+	Endpoint      string
+	Prefix        string
+	PathStyle     bool
+	TempDir       string
+	Timeout       time.Duration
+	MaxBytes      int64
+	MaxConcurrent int
+	SettingsDir   string
 }
 
 type AppConfig struct {
@@ -212,6 +229,19 @@ func Load() (Config, error) {
 			EgressDeny: getEnvAsList("SANDBOX_NETWORK_EGRESS_DENY", nil),
 			IPForward:  getEnvAsBool("SANDBOX_NETWORK_IP_FORWARD", true),
 		},
+		Snapshot: SnapshotConfig{
+			Enabled:       getEnvAsBool("SNAPSHOT_ENABLED", false),
+			Bucket:        getEnv("SNAPSHOT_S3_BUCKET", ""),
+			Region:        getEnv("SNAPSHOT_S3_REGION", "us-east-1"),
+			Endpoint:      getEnv("SNAPSHOT_S3_ENDPOINT", ""),
+			Prefix:        getEnv("SNAPSHOT_S3_PREFIX", "sandboxd/snapshots"),
+			PathStyle:     getEnvAsBool("SNAPSHOT_S3_PATH_STYLE", false),
+			TempDir:       getEnv("SNAPSHOT_TEMP_DIR", stateDir+"/snapshot-tmp"),
+			Timeout:       getEnvAsDuration("SNAPSHOT_TIMEOUT", 30*time.Minute),
+			MaxBytes:      int64(getEnvAsInt("SNAPSHOT_MAX_BYTES", 4<<30)),
+			MaxConcurrent: getEnvAsInt("SNAPSHOT_MAX_CONCURRENT", 2),
+			SettingsDir:   getEnv("SNAPSHOT_SETTINGS_DIR", stateDir+"/cloud-storage"),
+		},
 	}
 
 	cfg.Telemetry.Protocol = strings.ToLower(strings.TrimSpace(cfg.Telemetry.Protocol))
@@ -232,6 +262,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := validateNetworkConfig(cfg.Network); err != nil {
+		return Config{}, err
+	}
+	if err := validateSnapshotConfig(cfg.Snapshot); err != nil {
 		return Config{}, err
 	}
 

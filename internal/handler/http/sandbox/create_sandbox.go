@@ -12,6 +12,7 @@ import (
 // CreateSandbox godoc
 // @Summary Create a sandbox
 // @Description Creates an isolated environment (user, mount, pid, net, uts, ipc and cgroup namespaces; cgroup v2 limits; overlay root on a size-capped tmpfs; seccomp) and waits until it is running. Omitted limits use the server defaults; values above the server maximums are rejected.
+// @Description Set snapshot_id instead of image to restore a ready cloud filesystem backup. Saved resource limits, network, environment and labels are inherited unless overridden; TTL starts fresh. Processes and terminal sessions are not restored.
 // @Tags sandboxes
 // @Accept json
 // @Produce json

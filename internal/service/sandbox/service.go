@@ -15,6 +15,7 @@ import (
 	"github.com/bpradana/sandboxd/internal/observability/metrics"
 	"github.com/bpradana/sandboxd/internal/presentation"
 	sandboxrepository "github.com/bpradana/sandboxd/internal/repository/sandbox"
+	"github.com/bpradana/sandboxd/internal/snapshot"
 )
 
 type Service interface {
@@ -27,6 +28,14 @@ type Service interface {
 	Stats(ctx context.Context, id string) (*presentation.SandboxStatsResponse, error)
 	Keepalive(ctx context.Context, id string, req presentation.KeepaliveRequest) (*presentation.SandboxResponse, error)
 	Destroy(ctx context.Context, id string) error
+	CreateSnapshot(ctx context.Context, id string, req presentation.CreateSnapshotRequest) (*presentation.SnapshotResponse, error)
+	GetSnapshot(ctx context.Context, id string) (*presentation.SnapshotResponse, error)
+	ListSnapshots(ctx context.Context) ([]presentation.SnapshotResponse, error)
+	DeleteSnapshot(ctx context.Context, id string) error
+	GetCloudStorage(ctx context.Context) (*presentation.CloudStorageResponse, error)
+	TestCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) error
+	SaveCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) (*presentation.CloudStorageResponse, error)
+	DisconnectCloudStorage(ctx context.Context) error
 
 	Exec(ctx context.Context, id string, req presentation.ExecRequest) (*presentation.ExecResponse, error)
 	ExecStream(ctx context.Context, id string, req presentation.ExecRequest, emit StreamEmitter) error
@@ -63,16 +72,30 @@ type Params struct {
 	Sandbox   config.SandboxConfig
 	Exec      config.ExecConfig
 	Network   config.NetworkConfig
+	Snapshot  config.SnapshotConfig
 }
 
 type service struct {
-	repo    sandboxrepository.Repository
-	engine  engine.Engine
-	logger  *logging.Logger
-	metrics *metrics.Registry
-	sandbox config.SandboxConfig
-	exec    config.ExecConfig
-	network config.NetworkConfig
+	repo            sandboxrepository.Repository
+	engine          engine.Engine
+	logger          *logging.Logger
+	metrics         *metrics.Registry
+	sandbox         config.SandboxConfig
+	exec            config.ExecConfig
+	network         config.NetworkConfig
+	snapshotCfg     config.SnapshotConfig
+	snapshots       snapshot.Store
+	snapshotSlots   chan struct{}
+	snapshotMu      sync.Mutex
+	snapshotJobs    sync.WaitGroup
+	snapshotClosing bool
+	// A backup/restore holds this read lock for its entire job, keeping its
+	// cloud destination and credentials stable through every store operation.
+	snapshotStoreMu sync.RWMutex
+	cloudSettings   *snapshot.SettingsFile
+	cloudConnection snapshot.Connection
+	cloudSource     string
+	cloudUpdatedAt  time.Time
 
 	// inFlight counts running commands and uploads per sandbox; the idle
 	// reaper never stops a sandbox while it is doing work.
@@ -87,19 +110,27 @@ type service struct {
 	now        func() time.Time
 }
 
-func NewService(params Params) Service {
+func NewService(params Params) (Service, error) {
 	svc := newService(params.Repo, params.Engine, params.Logger, params.Metrics, params.Sandbox, params.Exec, params.Network)
+	svc.snapshotCfg = params.Snapshot
+	svc.snapshotSlots = make(chan struct{}, params.Snapshot.MaxConcurrent)
+	if err := svc.loadCloudStorage(context.Background()); err != nil {
+		return nil, err
+	}
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(context.Context) error {
+			if err := svc.cleanupSnapshotTemps(); err != nil {
+				return err
+			}
 			svc.startBackground()
 			return nil
 		},
-		OnStop: func(context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			svc.stopBackground()
-			return nil
+			return svc.stopSnapshots(ctx)
 		},
 	})
-	return svc
+	return svc, nil
 }
 
 func newService(

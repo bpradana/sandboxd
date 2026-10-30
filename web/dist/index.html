@@ -19,7 +19,7 @@
     </div>
     <div class="topbar-right">
       <span id="engine-status" class="status" data-state="unknown" title="Engine readiness (/readyz)"><i></i><span>checking…</span></span>
-      <button id="settings-open" class="btn ghost" type="button">API key</button>
+      <button id="settings-open" class="btn ghost" type="button">Settings</button>
     </div>
   </header>
 
@@ -59,6 +59,12 @@
         <ul id="sandbox-list" class="sandbox-list" aria-live="polite"></ul>
         <p id="sandbox-empty" class="empty">No sandboxes yet.</p>
       </section>
+
+      <section id="snapshots-panel" class="panel list-panel" hidden>
+        <div class="list-head"><h2>Cloud snapshots</h2></div>
+        <p id="snapshots-status" class="muted" role="status">Save a sandbox to restore its files later.</p>
+        <ul id="snapshot-list" class="sandbox-list" aria-live="polite"></ul>
+      </section>
     </aside>
 
     <section class="workspace">
@@ -73,8 +79,13 @@
   </main>
 
   <dialog id="settings">
+    <div class="settings-heading"><h2>Settings</h2><button id="settings-close" class="btn ghost" type="button">Close</button></div>
+    <nav class="settings-nav" aria-label="Settings sections">
+      <button id="settings-api-open" class="btn small" type="button" aria-pressed="true">API access</button>
+      <button id="cloud-storage-open" class="btn small" type="button" aria-pressed="false">Cloud storage</button>
+    </nav>
     <form method="dialog" id="settings-form">
-      <h2>API key</h2>
+      <h2>API access</h2>
       <p class="muted">Sent as a bearer token to <code>/api/v1</code>. Leave empty when the server has no keys configured. Stored in this browser only.</p>
       <input id="api-key" type="password" autocomplete="off" placeholder="APP_API_KEYS value">
       <div class="dialog-actions">
@@ -82,6 +93,40 @@
         <button class="btn primary" value="save">Save</button>
       </div>
     </form>
+    <section id="cloud-storage-settings" hidden>
+      <h2>Cloud storage</h2>
+      <p class="muted">Connect an S3-compatible bucket for this deployment's filesystem backups.</p>
+      <p id="cloud-connection-status" role="status" aria-live="polite">Loading connection…</p>
+      <form id="cloud-storage-form" autocomplete="off">
+        <fieldset id="cloud-fields">
+          <label>Authentication
+            <select id="cloud-auth-mode" required>
+              <option value="server_identity">Server identity</option>
+              <option value="access_keys">Access keys</option>
+            </select>
+          </label>
+          <p id="cloud-identity-help" class="muted">Use credentials already configured on the server, such as its IAM role.</p>
+          <fieldset id="cloud-credentials" hidden>
+            <p id="cloud-credentials-help" class="muted">Keys are stored encrypted on the server and are never returned to this browser.</p>
+            <label>Access key<input id="cloud-access-key" type="text" autocomplete="off" spellcheck="false" maxlength="256"></label>
+            <label>Secret key<input id="cloud-secret-key" type="password" autocomplete="new-password" maxlength="4096"></label>
+            <label>Session token <small>Optional, for temporary credentials</small><input id="cloud-session-token" type="password" autocomplete="new-password" maxlength="16384"></label>
+          </fieldset>
+          <div class="grid2">
+            <label>Bucket<input id="cloud-bucket" type="text" required maxlength="255" spellcheck="false" placeholder="my-backups"></label>
+            <label>Region<input id="cloud-region" type="text" required maxlength="64" spellcheck="false" placeholder="us-east-1"></label>
+          </div>
+          <label>Endpoint <small>Leave empty for AWS S3</small><input id="cloud-endpoint" type="url" maxlength="2048" spellcheck="false" placeholder="https://your-storage-provider.example"></label>
+          <label>Backup prefix<input id="cloud-prefix" type="text" maxlength="1024" spellcheck="false" placeholder="sandboxd/snapshots"></label>
+          <label class="checkbox"><input id="cloud-path-style" type="checkbox">Use path-style bucket URLs</label>
+        </fieldset>
+        <div class="dialog-actions">
+          <button id="cloud-disconnect" class="btn danger" type="button" disabled>Disconnect</button>
+          <button id="cloud-test" class="btn" type="button">Test connection</button>
+          <button id="cloud-save" class="btn primary" type="submit">Save connection</button>
+        </div>
+      </form>
+    </section>
   </dialog>
 
   <div id="toasts" class="toasts" aria-live="assertive"></div>
