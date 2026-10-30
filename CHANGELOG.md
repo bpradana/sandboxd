@@ -33,6 +33,9 @@ All notable changes to this project are documented here. The format follows
   the packages and sources one sandbox prepared become the starting point of
   every sandbox after it instead of being installed again on each start. The
   console offers it as "Use as image" on a snapshot card.
+- An MCP server, `sandboxdctl mcp`, exposing sandboxes to AI agents as tools:
+  lifecycle, exec, long-running services, files, listening ports and app
+  previews. It drives the REST API, so an agent can do what its key allows.
 - S3 Transfer Acceleration for snapshot transfers, as a cloud storage setting
   and `SNAPSHOT_S3_ACCELERATE`, for daemons far from their bucket.
 - `GET /snapshots/progress`, listing running backups and restores from memory
