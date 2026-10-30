@@ -127,7 +127,7 @@ test("edit preserves permissions, catches agent changes, and protects unsaved wo
   assert.equal(new TextDecoder().decode(f.files.get("/project/app.py").bytes), "agent changes\n");
   assert.equal(f.explorer.dirty, true);
   assert.ok(f.confirmations.some((message) => message.includes("changed in the sandbox")));
-  f.explorer.close();
+  await f.explorer.close();
   assert.equal(f.document.querySelector("#files-dialog").open, true);
 });
 
@@ -201,6 +201,24 @@ test("sandbox stop disables operations and authenticated downloads keep keys out
   f.explorer.update([]);
   assert.equal(f.document.querySelector("#files-upload").disabled, true);
   assert.match(f.document.querySelector("#files-status").textContent, /stopped/);
+});
+
+test("stopping the sandbox during an overwrite decision never writes stale edits", async (t) => {
+  const f = fixture(t);
+  await f.explorer.open({ id: "sandbox-a" });
+  await f.select("/project/app.py");
+  f.edit("my edits\n");
+  f.files.get("/project/app.py").bytes = encode("agent edits\n");
+  let resolve, requested;
+  const waiting = new Promise((done) => { requested = done; });
+  f.explorer.confirm = () => { requested(); return new Promise((done) => { resolve = done; }); };
+  const saving = f.explorer.run((ctx) => f.explorer.save(ctx));
+  await waiting;
+  f.explorer.update([]);
+  resolve(true);
+  await saving;
+  assert.equal(f.calls.filter((call) => call.method === "PUT").length, 0);
+  assert.equal(new TextDecoder().decode(f.files.get("/project/app.py").bytes), "agent edits\n");
 });
 
 test("paths, UTF-8 files, BOM and streamed size limits", async () => {

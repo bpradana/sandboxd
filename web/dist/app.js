@@ -10,6 +10,7 @@ import { RunSession } from "./run.js";
 import { setupCloudStorage } from "./cloud-storage.js";
 import { setupWorkspaceTools } from "./workspace-tools.js";
 import { FileExplorer } from "./file-explorer.js";
+import { confirmAction, promptValue } from "./dialogs.js";
 import { ConsoleUI, describeImage, sandboxMeta, icon } from "./console-ui.js";
 
 const POLL_INTERVAL_MS = 3000;
@@ -307,7 +308,7 @@ async function renderImages() {
 }
 
 async function removeImage(name, button) {
-  if (!window.confirm(`Remove base image ${name}? Sandboxes already running on it keep working. If it was promoted from a snapshot, it is removed from cloud storage too, so other daemons stop resolving the name.`)) return;
+  if (!await confirmAction(`Remove base image ${name}? Sandboxes already running on it keep working. If it was promoted from a snapshot, it is removed from cloud storage too, so other daemons stop resolving the name.`, { title: "Remove base image?", confirmLabel: "Remove image" })) return;
   button.disabled = true;
   try {
     await api("DELETE", `/images/${encodeURIComponent(name)}`);
@@ -426,7 +427,7 @@ async function keepalive(id) {
 }
 
 async function killSandbox(id) {
-  if (!window.confirm(`Kill sandbox ${id}? Everything inside it is lost.`)) return;
+  if (!await confirmAction(`This will stop all processes in ${id} and delete its filesystem. This cannot be undone.`, { title: "Kill sandbox?", confirmLabel: "Kill sandbox" })) return;
   try {
     await api("DELETE", `/sandboxes/${encodeURIComponent(id)}`);
     toast(`Killed ${shortID(id)}`);
@@ -537,7 +538,7 @@ function renderSnapshot(item) {
 }
 
 async function saveSnapshot(id, button) {
-  if (!window.confirm(`Save and stop sandbox ${id}? Running commands and terminals will end. Files will be backed up to cloud storage.`)) return;
+  if (!await confirmAction(`Running commands and terminals in ${id} will end. Files will be backed up to cloud storage.`, { title: "Save and stop sandbox?", confirmLabel: "Save and stop" })) return;
   button.disabled = true;
   try {
     await api("POST", `/sandboxes/${encodeURIComponent(id)}/snapshots`, {});
@@ -566,7 +567,10 @@ async function restoreSnapshot(id, button) {
 // promoteSnapshot turns a backup into a base image, so whatever this sandbox
 // had installed becomes the starting point of the next one at no cost.
 async function promoteSnapshot(id, button) {
-  const name = window.prompt("Name the base image. New sandboxes can then be created from it.\n\nLowercase letters, digits, dot, dash and underscore.", "");
+  const name = await promptValue("New sandboxes can start from this snapshot. Use lowercase letters, digits, dots, dashes, or underscores.", {
+    title: "Create a base image", confirmLabel: "Create image",
+    input: { label: "Image name", placeholder: "my-base-image", pattern: "[a-z0-9][a-z0-9._\\-]{0,63}", maxLength: 64 },
+  });
   if (name === null) return;
   button.disabled = true;
   button.textContent = "Importing…";
@@ -583,7 +587,7 @@ async function promoteSnapshot(id, button) {
 }
 
 async function deleteSnapshot(id, button) {
-  if (!window.confirm(`Delete backup ${id}? This removes its saved filesystem from cloud storage.`)) return;
+  if (!await confirmAction(`This permanently removes the saved filesystem for ${id} from cloud storage.`, { title: "Delete backup?", confirmLabel: "Delete backup" })) return;
   button.disabled = true;
   try {
     await api("DELETE", `/snapshots/${encodeURIComponent(id)}`);

@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { confirmAction } from "./dialogs.js";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -126,7 +127,9 @@ export function setupCloudStorage({ toast, onChange }) {
   });
 
   $("#cloud-disconnect").addEventListener("click", async () => {
-    if (busy || !window.confirm("Disconnect cloud storage? Existing backups stay in the bucket. Saved credentials will be removed from this deployment.")) return;
+    if (busy) return;
+    const confirmed = await confirmAction("Existing backups stay in the bucket. Saved credentials will be removed from this deployment.", { title: "Disconnect cloud storage?", confirmLabel: "Disconnect" });
+    if (!confirmed || busy) return;
     setBusy(true);
     try {
       await api("DELETE", "/settings/cloud-storage");

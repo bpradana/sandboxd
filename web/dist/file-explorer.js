@@ -1,4 +1,5 @@
 import { api, request } from "./api.js";
+import { confirmAction } from "./dialogs.js";
 import { cleanPath, childPath, fileURL, writeMode, sameBytes, decodeText, readBytes, EDIT_LIMIT, DOWNLOAD_LIMIT } from "./file-utils.js";
 
 // The same folder, shown four ways. List is the default because it is the
@@ -60,7 +61,7 @@ function savedView() {
 }
 
 export class FileExplorer {
-  constructor({ document: doc = document, toast, confirm = (message) => window.confirm(message) }) {
+  constructor({ document: doc = document, toast, confirm = (message, options) => confirmAction(message, { ...options, document: doc }) }) {
     this.doc = doc;
     this.$ = (id) => doc.querySelector(`#${id}`);
     this.toast = toast;
@@ -115,11 +116,12 @@ export class FileExplorer {
 
   context() { return { id: this.sandboxID, version: this.version, signal: this.abort.signal }; }
   current(ctx) { return ctx.version === this.version && ctx.id === this.sandboxID && this.dialog.open && !this.stopped; }
-  discard() { return !this.dirty || this.confirm("Discard unsaved changes to this file?"); }
+  async discard(ctx) { return !this.dirty || await this.confirm("Your unsaved edits to this file will be lost.", { title: "Discard unsaved changes?", confirmLabel: "Discard changes", signal: ctx?.signal }); }
   status(message) { this.$("files-status").textContent = message; }
 
   async open(sb) {
-    if (!this.discard()) return;
+    const version = this.version;
+    if (!await this.discard() || version !== this.version) return;
     this.abort?.abort();
     this.abort = new AbortController();
     this.version++;
@@ -141,7 +143,10 @@ export class FileExplorer {
     return this.run((ctx) => this.list("/", ctx));
   }
 
-  close() { if (this.discard()) { this.dirty = false; this.dialog.close(); } }
+  async close() {
+    const version = this.version;
+    if (await this.discard() && version === this.version) { this.dirty = false; this.dialog.close(); }
+  }
 
   async run(action) {
     if (this.busy || this.stopped || !this.dialog.open) return;
@@ -519,7 +524,7 @@ export class FileExplorer {
       try { await this.list(entry.path, ctx); return; }
       catch (error) { if (error.name === "AbortError") throw error; }
     }
-    if (!this.discard()) return;
+    if (!await this.discard(ctx) || !this.current(ctx)) return;
     this.clearEditor();
     this.file = { ...entry };
     this.$("files-editor-name").textContent = entry.path;
@@ -579,7 +584,8 @@ export class FileExplorer {
     const response = await request("GET", fileURL(ctx.id, file.path), { signal: ctx.signal });
     const current = await readBytes(response, EDIT_LIMIT);
     if (!this.current(ctx)) return;
-    if (!sameBytes(current, this.originalBytes) && !this.confirm("This file changed in the sandbox since you opened it. Overwrite those changes?")) { this.status("Save canceled; sandbox changes were kept."); return; }
+    if (!sameBytes(current, this.originalBytes) && !await this.confirm("This file changed in the sandbox since you opened it. Overwrite those changes?", { title: "Overwrite external changes?", confirmLabel: "Overwrite file", signal: ctx.signal })) { if (this.current(ctx)) this.status("Save canceled; sandbox changes were kept."); return; }
+    if (!this.current(ctx)) return;
     const mode = writeMode(response.headers.get("X-File-Mode") || info.mode || file.mode);
     await request("PUT", fileURL(ctx.id, file.path, "", { mode }), { body: bytes, contentType: "application/octet-stream", signal: ctx.signal });
     if (!this.current(ctx)) return;
@@ -600,8 +606,9 @@ export class FileExplorer {
         const existing = await this.exists(path, ctx);
         if (!this.current(ctx)) return;
         if (existing && existing.type !== "file") throw new Error(`${file.name} is not a regular file and will not be overwritten.`);
-        if (existing && !this.confirm(`Overwrite ${path}?`)) continue;
-        if (this.file?.path === path && this.dirty && !this.discard()) continue;
+        if (existing && !await this.confirm(`Overwrite ${path}?`, { title: "Replace existing file?", confirmLabel: "Replace file", signal: ctx.signal })) continue;
+        if (this.file?.path === path && this.dirty && !await this.discard(ctx)) continue;
+        if (!this.current(ctx)) return;
         this.status(`Uploading ${file.name}…`);
         await request("PUT", fileURL(ctx.id, path, "", { mode: writeMode(existing?.mode) }), { body: file, contentType: "application/octet-stream", signal: ctx.signal });
         if (!this.current(ctx)) return;
@@ -634,8 +641,10 @@ export class FileExplorer {
     if (!entry) return;
     const file = { ...entry };
     const affectsEditor = this.file && (this.file.path === file.path || this.file.path.startsWith(file.path + "/"));
-    if (affectsEditor && !this.discard()) return;
-    if (!this.confirm(`Delete ${file.path}${file.type === "dir" ? " and all its contents" : ""}? This cannot be undone.`)) { this.status("Delete canceled."); return; }
+    if (affectsEditor && !await this.discard(ctx)) return;
+    if (!this.current(ctx)) return;
+    if (!await this.confirm(`Delete ${file.path}${file.type === "dir" ? " and all its contents" : ""}? This cannot be undone.`, { title: file.type === "dir" ? "Delete folder?" : "Delete file?", confirmLabel: file.type === "dir" ? "Delete folder" : "Delete file", signal: ctx.signal })) { if (this.current(ctx)) this.status("Delete canceled."); return; }
+    if (!this.current(ctx)) return;
     await api("DELETE", fileURL(ctx.id, file.path, "", { recursive: String(file.type === "dir") }), undefined, { signal: ctx.signal });
     if (!this.current(ctx)) return;
     if (affectsEditor) this.clearEditor();

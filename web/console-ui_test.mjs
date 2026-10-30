@@ -134,6 +134,7 @@ test("the complete console starts and routes Files and Run to the selected sandb
     if (path.endsWith("/sandboxes")) return json([{ id: "sbx-app", state: "running", image: "debian", network: "none", limits: { cpu_millis: 1000, memory_mb: 512 }, expires_at: new Date(Date.now() + 3600000).toISOString(), created_at: new Date().toISOString() }]);
     if (path.endsWith("/stats")) return json({ memory_bytes: 1024, storage_used_bytes: 2048, storage_limit_bytes: 1048576, cpu_usage_micros: 0, pids_current: 2 });
     if (path.endsWith("/terminal/tickets")) return json({ ticket: "test-ticket" });
+    if (path === "/api/v1/sandboxes/sbx-app") return json({});
     if (path.endsWith("/files/list")) return json([]);
     if (path.endsWith("/images") || path.endsWith("/snapshots")) return json([]);
     throw new Error(`Unexpected mocked request: ${path}`);
@@ -163,6 +164,29 @@ test("the complete console starts and routes Files and Run to the selected sandb
   runTab.dispatchEvent(back);
   assert.equal(f.$("tabs").firstElementChild.getAttribute("aria-selected"), "true");
   assert.equal(runTab.getAttribute("tabindex"), "-1");
+
+  // Killing waits for an in-app decision. Cancel never sends the request.
+  f.window.confirm = () => { throw new Error("Native browser confirmation is forbidden"); };
+  const make = f.document.createElement.bind(f.document);
+  f.document.createElement = (tag) => {
+    const node = make(tag);
+    if (tag === "dialog") {
+      node.showModal = () => { node.open = true; };
+      node.close = () => { node.open = false; };
+    }
+    return node;
+  };
+  const kill = f.$("sandbox-list").querySelector(".sandbox-manage .btn.danger");
+  kill.click();
+  assert.equal(f.document.querySelector(".decision-dialog h2").textContent, "Kill sandbox?");
+  assert.ok(!calls.includes("/api/v1/sandboxes/sbx-app"));
+  f.document.querySelector(".decision-dialog button").click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(!calls.includes("/api/v1/sandboxes/sbx-app"));
+  kill.click();
+  f.document.querySelector(".decision-dialog form").dispatchEvent(new f.window.Event("submit", { cancelable: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.filter((path) => path === "/api/v1/sandboxes/sbx-app").length, 1);
 });
 
 test("the image picker says which images are not on this host yet", () => {

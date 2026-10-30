@@ -627,3 +627,11 @@ dialog p { line-height: 1.7; font-size: 12px; }
   #files-dialog[open] { gap: 9px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+
+/* Decisions stay in the app, including when opened above the file editor. */
+.decision-dialog { width: min(440px, calc(100vw - 32px)); padding: 26px; }
+.decision-dialog h2 { margin: 0 0 12px; }
+.decision-dialog .decision-message { margin: 0 0 20px; overflow-wrap: anywhere; white-space: pre-line; }
+.decision-dialog .dialog-actions { margin-top: 24px; }
+.decision-dialog[data-danger="true"] .decision-submit { background: var(--danger); border-color: var(--danger); color: var(--bg); }
+.decision-dialog[data-danger="true"] .decision-submit:hover { background: color-mix(in srgb, var(--danger) 90%, var(--text)); }
