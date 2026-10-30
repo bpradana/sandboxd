@@ -94,13 +94,16 @@ func TestReadChangesClassifiesTheUpperLayer(t *testing.T) {
 		"out/report.md": text("nested and new\n"),
 	})
 
-	// A whiteout is a character device numbered 0; an opaque directory hides
-	// everything the image put in it.
+	// A whiteout is a character device numbered 0. Overlayfs can mark both
+	// replacement directories and entirely new directories opaque; only the
+	// former should be called replaced.
 	if err := unix.Mknod(filepath.Join(upper, "gone.txt"), unix.S_IFCHR, 0); err != nil {
 		t.Fatalf("create whiteout: %v", err)
 	}
-	if err := unix.Setxattr(filepath.Join(upper, "vendor"), opaqueXattr, []byte("y"), 0); err != nil {
-		t.Fatalf("mark opaque: %v", err)
+	for _, path := range []string{"vendor", "out"} {
+		if err := unix.Setxattr(filepath.Join(upper, path), opaqueXattr, []byte("y"), 0); err != nil {
+			t.Fatalf("mark %s opaque: %v", path, err)
+		}
 	}
 
 	set, err := readChanges(context.Background(), upper, lower)

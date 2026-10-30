@@ -25,9 +25,9 @@ const (
 	// tens of thousands of files, and no caller reads a list that long.
 	maxChanges = 20000
 	// opaqueXattr marks a directory whose lower entries must not show
-	// through, which is how overlayfs records a directory being removed and
-	// one of the same name created in its place. Overlays mounted with
-	// userxattr record it in the user namespace instead.
+	// through. Overlayfs uses it for replacements and can also set it on
+	// newly created directories. Overlays mounted with userxattr record it
+	// in the user namespace instead.
 	opaqueXattr     = "trusted.overlay.opaque"
 	opaqueUserXattr = "user.overlay.opaque"
 )
@@ -136,7 +136,9 @@ func (w *changeWalker) directory(parentfd int, name, rel string, st *unix.Stat_t
 	defer func() { _ = unix.Close(fd) }()
 
 	change := w.entry(rel, st)
-	if isOpaque(fd) {
+	// New directories can also be opaque. It is a replacement only when
+	// there was a path in the base image for the opaque directory to hide.
+	if change.Kind == ChangeModified && isOpaque(fd) {
 		change.Kind = ChangeReplaced
 	}
 	// A directory the image already had is in the upper layer only because
