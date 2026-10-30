@@ -13,6 +13,13 @@ import (
 	"github.com/bpradana/sandboxd/internal/observability/logging"
 )
 
+// stacktraceLevel is where a stack trace earns its place. zap's development
+// preset attaches one to every warning, which buries expected conditions --
+// an unauthenticated development API, a backup that will be retried -- under
+// pages of frames that say only how the logger was wired. Errors still carry
+// one, because there the frames are the diagnosis.
+const stacktraceLevel = zapcore.ErrorLevel
+
 func NewLogger(lc fx.Lifecycle, cfg config.AppConfig, build buildinfo.Info) (*logging.Logger, error) {
 	var zapCfg zap.Config
 	if cfg.Env == "development" {
@@ -29,7 +36,7 @@ func NewLogger(lc fx.Lifecycle, cfg config.AppConfig, build buildinfo.Info) (*lo
 		zapCfg.Level = zap.NewAtomicLevelAt(level)
 	}
 
-	logger, err := zapCfg.Build()
+	logger, err := buildZapLogger(zapCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -48,4 +55,8 @@ func NewLogger(lc fx.Lifecycle, cfg config.AppConfig, build buildinfo.Info) (*lo
 	})
 
 	return logging.New(base), nil
+}
+
+func buildZapLogger(zapCfg zap.Config) (*zap.Logger, error) {
+	return zapCfg.Build(zap.AddStacktrace(stacktraceLevel))
 }
