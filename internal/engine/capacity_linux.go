@@ -33,8 +33,8 @@ func (e *linuxEngine) HostCapacity() (*HostCapacity, error) {
 	}
 	// Bavail, not Bfree: the daemon is not root on every filesystem it is
 	// given, and the reserved blocks are not its to spend.
-	capacity.StorageFreeMB = int(uint64(fs.Bavail) * uint64(fs.Bsize) >> 20)  // #nosec G115 -- block counts are non-negative.
-	capacity.StorageTotalMB = int(uint64(fs.Blocks) * uint64(fs.Bsize) >> 20) // #nosec G115 -- block counts are non-negative.
+	capacity.StorageFreeMB = int(fs.Bavail * uint64(fs.Bsize) >> 20)  // #nosec G115 -- block counts are non-negative.
+	capacity.StorageTotalMB = int(fs.Blocks * uint64(fs.Bsize) >> 20) // #nosec G115 -- block counts are non-negative.
 	return capacity, nil
 }
 
