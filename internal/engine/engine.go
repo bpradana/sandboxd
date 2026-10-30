@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 )
 
 var (
+	ErrCheckpointThaw      = errors.New("sandbox could not resume after checkpoint")
 	ErrUnsupportedPlatform = errors.New("sandbox engine requires linux")
 	ErrNotReady            = errors.New("sandbox engine is not ready")
 	ErrSandboxNotFound     = errors.New("sandbox not found")
@@ -194,6 +196,9 @@ type Engine interface {
 	// CaptureSnapshot stops every process and writes a full gzip tar archive.
 	// Resources remain allocated until Destroy, including on capture failure.
 	CaptureSnapshot(ctx context.Context, id string, dst io.Writer, maxBytes int64) error
+	CaptureCheckpoint(ctx context.Context, id string, dst io.Writer, maxBytes int64) error
+	// DialSandbox connects only to IPv4 loopback inside this sandbox's network namespace.
+	DialSandbox(ctx context.Context, id string, port int) (net.Conn, error)
 	Stats(ctx context.Context, id string) (*Stats, error)
 
 	Exec(ctx context.Context, id string, req ExecRequest, out OutputFunc) (*ExecResult, error)

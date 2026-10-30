@@ -19,6 +19,7 @@ import (
 
 	"github.com/bpradana/sandboxd/internal/appctx"
 	"github.com/bpradana/sandboxd/internal/consts"
+	"github.com/bpradana/sandboxd/internal/engine"
 	"github.com/bpradana/sandboxd/internal/helper"
 	"github.com/bpradana/sandboxd/internal/helper/safego"
 	"github.com/bpradana/sandboxd/internal/helper/validation"
@@ -120,7 +121,7 @@ func (s *service) CreateSnapshot(ctx context.Context, id string, req presentatio
 	if err != nil {
 		return nil, mapError(err)
 	}
-	if !canSnapshot(sb) {
+	if !canSnapshot(sb) || req.KeepRunning && sb.State != consts.SandboxStateRunning {
 		return nil, appctx.ErrSandboxNotRunning()
 	}
 	file, err := s.snapshotTemp()
@@ -134,24 +135,50 @@ func (s *service) CreateSnapshot(ctx context.Context, id string, req presentatio
 		}
 	}()
 	manifest := snapshot.Manifest{
+		Mode: "save_stop", Trigger: req.Trigger,
 		Version: snapshot.Version, ID: helper.NewID("snap"), SandboxID: id,
 		Status: snapshot.Capturing, CreatedAt: s.now(), DeadlineAt: s.now().Add(s.snapshotCfg.Timeout),
 		Architecture: runtime.GOARCH, Labels: maps.Clone(req.Labels),
 		Config: snapshot.SandboxConfig{
-			Image: sb.Image, Network: sb.Network, Limits: sb.Limits,
+			SnapshotPolicy: sb.SnapshotPolicy,
+			Image:          sb.Image, Network: sb.Network, Limits: sb.Limits,
 			Env: maps.Clone(sb.Env), Labels: maps.Clone(sb.Labels), IdleTimeoutSeconds: int(sb.IdleTimeout.Seconds()),
 		},
+	}
+	if manifest.Trigger == "" {
+		manifest.Trigger = "manual"
+	}
+	if req.KeepRunning {
+		manifest.Mode = "checkpoint"
+	}
+	if manifest.Trigger == "expiry" {
+		deadline := sb.ExpiresAt.Add(s.snapshotCfg.Timeout)
+		if sb.IdleTimeout > 0 && !s.busy(sb.ID) {
+			idleDeadline := sb.LastActivityAt.Add(sb.IdleTimeout).Add(s.snapshotCfg.Timeout)
+			if idleDeadline.Before(deadline) {
+				deadline = idleDeadline
+			}
+		}
+		if deadline.Before(manifest.DeadlineAt) {
+			manifest.DeadlineAt = deadline
+		}
 	}
 	// Establish cloud access before stopping the source sandbox.
 	if err := s.snapshots.PutManifest(ctx, manifest); err != nil {
 		return nil, snapshotStorageError(err)
 	}
 	_, err = s.repo.Update(ctx, id, func(record *model.Sandbox) error {
-		if !canSnapshot(record) {
+		if !canSnapshot(record) || req.KeepRunning && record.State != consts.SandboxStateRunning {
 			return appctx.ErrSandboxNotRunning()
 		}
-		record.State = consts.SandboxStateSnapshotting
-		record.StopReason = consts.StopReasonSnapshot
+		record.SnapshotInProgress = true
+		if !req.KeepRunning {
+			record.State = consts.SandboxStateSnapshotting
+			record.StopReason = consts.StopReasonSnapshot
+		}
+		if manifest.Trigger == "expiry" {
+			record.ExpiryBackupAttempted = true
+		}
 		record.FailureReason = ""
 		return nil
 	})
@@ -171,7 +198,7 @@ func (s *service) CreateSnapshot(ctx context.Context, id string, req presentatio
 }
 
 func canSnapshot(sb *model.Sandbox) bool {
-	return sb.State == consts.SandboxStateRunning || (sb.State == consts.SandboxStateFailed && sb.Active() && sb.StopReason == consts.StopReasonSnapshot)
+	return !sb.SnapshotInProgress && (sb.State == consts.SandboxStateRunning || (sb.State == consts.SandboxStateFailed && sb.Active() && sb.StopReason == consts.StopReasonSnapshot))
 }
 
 func (s *service) runSnapshot(m snapshot.Manifest, file *os.File) {
@@ -193,11 +220,32 @@ func (s *service) runSnapshot(m snapshot.Manifest, file *os.File) {
 		defer failureCancel()
 		_ = s.snapshots.PutManifest(failureCtx, m)
 		_, _ = s.repo.Update(failureCtx, m.SandboxID, func(sb *model.Sandbox) error {
-			sb.State, sb.FailureReason = consts.SandboxStateFailed, m.FailureReason
+			sb.SnapshotInProgress = false
+			sb.LastSnapshotError = "backup failed; check cloud storage and retry"
+			sb.NextSnapshotAt = s.now().Add(time.Minute)
+			if m.Mode != "checkpoint" || errors.Is(err, engine.ErrCheckpointThaw) {
+				sb.State, sb.FailureReason = consts.SandboxStateFailed, m.FailureReason
+				sb.StopReason = consts.StopReasonSnapshot
+			}
 			return nil // StoppedAt remains nil: retain capacity until actual cleanup.
 		})
 		return
 	}
+	if m.Mode == "checkpoint" {
+		_, _ = s.repo.Update(ctx, m.SandboxID, func(sb *model.Sandbox) error {
+			sb.SnapshotInProgress, sb.LastSnapshotError = false, ""
+			sb.LastSnapshotAt = s.now()
+			sb.NextSnapshotAt = nextSnapshotTime(s.now(), sb.SnapshotPolicy.IntervalSeconds)
+			return nil
+		})
+		s.pruneAutomaticSnapshots(ctx, m)
+		return
+	}
+	_, _ = s.repo.Update(ctx, m.SandboxID, func(sb *model.Sandbox) error {
+		sb.SnapshotInProgress, sb.LastSnapshotError, sb.LastSnapshotAt = false, "", s.now()
+		return nil
+	})
+	s.pruneAutomaticSnapshots(ctx, m)
 	// Only a verified cloud backup permits destruction of the source filesystem.
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), s.sandbox.DestroyTimeout)
 	defer cleanupCancel()
@@ -216,7 +264,15 @@ func (s *service) runSnapshot(m snapshot.Manifest, file *os.File) {
 
 func (s *service) captureAndUpload(ctx context.Context, m *snapshot.Manifest, file *os.File) error {
 	sum := sha256.New()
-	if err := s.engine.CaptureSnapshot(ctx, m.SandboxID, io.MultiWriter(file, sum), s.snapshotCfg.MaxBytes); err != nil {
+	capture := s.engine.CaptureSnapshot
+	captureCtx := ctx
+	if m.Mode == "checkpoint" {
+		capture = s.engine.CaptureCheckpoint
+		var cancel context.CancelFunc
+		captureCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+	}
+	if err := capture(captureCtx, m.SandboxID, io.MultiWriter(file, sum), s.snapshotCfg.MaxBytes); err != nil {
 		return err
 	}
 	info, err := file.Stat()
@@ -233,9 +289,14 @@ func (s *service) captureAndUpload(ctx context.Context, m *snapshot.Manifest, fi
 	if err := s.snapshots.Upload(ctx, m.ID, file, m.SizeBytes, m.SHA256); err != nil {
 		return err
 	}
-	// A successful PUT alone is insufficient: verify the stored bytes before
-	// committing the ready manifest and releasing the source filesystem.
-	if err := s.snapshots.Download(ctx, *m, io.Discard); err != nil {
+	// Verify the provider's checksum (or read back the archive when unavailable)
+	// before committing the ready manifest and releasing the source filesystem.
+	if verifier, ok := s.snapshots.(snapshot.Verifier); ok {
+		err = verifier.Verify(ctx, *m, file)
+	} else {
+		err = s.snapshots.Download(ctx, *m, io.Discard)
+	}
+	if err != nil {
 		return err
 	}
 	m.Status = snapshot.Ready
@@ -297,6 +358,7 @@ func snapshotResponse(m snapshot.Manifest, now time.Time) presentation.SnapshotR
 		reason = "snapshot job interrupted or timed out"
 	}
 	return presentation.SnapshotResponse{
+		Mode: m.Mode, Trigger: m.Trigger,
 		ID: m.ID, SandboxID: m.SandboxID, Status: status,
 		CreatedAt: m.CreatedAt, SizeBytes: m.SizeBytes, SHA256: m.SHA256, Architecture: m.Architecture,
 		Labels: maps.Clone(m.Labels), FailureReason: reason,
@@ -379,6 +441,10 @@ func (s *service) prepareRestore(ctx context.Context, req presentation.CreateSan
 	}
 	if req.Labels == nil {
 		req.Labels = maps.Clone(m.Config.Labels)
+	}
+	if req.SnapshotPolicy == nil {
+		policy := m.Config.SnapshotPolicy
+		req.SnapshotPolicy = &policy
 	}
 	// Validate cloud-supplied defaults too, and enforce this host's limits
 	// before downloading or extracting any archive.

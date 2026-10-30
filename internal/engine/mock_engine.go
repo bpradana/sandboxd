@@ -12,6 +12,7 @@ package engine
 import (
 	context "context"
 	io "io"
+	net "net"
 	os "os"
 	reflect "reflect"
 
@@ -40,6 +41,20 @@ func NewMockEngine(ctrl *gomock.Controller) *MockEngine {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
+}
+
+// CaptureCheckpoint mocks base method.
+func (m *MockEngine) CaptureCheckpoint(ctx context.Context, id string, dst io.Writer, maxBytes int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CaptureCheckpoint", ctx, id, dst, maxBytes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CaptureCheckpoint indicates an expected call of CaptureCheckpoint.
+func (mr *MockEngineMockRecorder) CaptureCheckpoint(ctx, id, dst, maxBytes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CaptureCheckpoint", reflect.TypeOf((*MockEngine)(nil).CaptureCheckpoint), ctx, id, dst, maxBytes)
 }
 
 // CaptureSnapshot mocks base method.
@@ -97,6 +112,21 @@ func (m *MockEngine) Destroy(ctx context.Context, id string) error {
 func (mr *MockEngineMockRecorder) Destroy(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Destroy", reflect.TypeOf((*MockEngine)(nil).Destroy), ctx, id)
+}
+
+// DialSandbox mocks base method.
+func (m *MockEngine) DialSandbox(ctx context.Context, id string, port int) (net.Conn, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DialSandbox", ctx, id, port)
+	ret0, _ := ret[0].(net.Conn)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DialSandbox indicates an expected call of DialSandbox.
+func (mr *MockEngineMockRecorder) DialSandbox(ctx, id, port any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DialSandbox", reflect.TypeOf((*MockEngine)(nil).DialSandbox), ctx, id, port)
 }
 
 // Exec mocks base method.

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/bpradana/sandboxd/internal/snapshot"
 )
@@ -42,9 +43,57 @@ func (e *linuxEngine) CaptureSnapshot(ctx context.Context, id string, dst io.Wri
 		return ctx.Err()
 	}
 	inst.closePipes()
-	inst.fsMu.Lock()
+	if err := lockSnapshotFS(ctx, inst); err != nil {
+		return err
+	}
 	defer inst.fsMu.Unlock()
 	return exportFilesystem(ctx, inst.rootfsDir(), dst, e.sandboxCfg.UIDMapBase, e.sandboxCfg.UIDMapSize, maxBytes)
+}
+
+// CaptureCheckpoint preserves processes and terminals. Freeze only while
+// copying locally; callers upload after thawing. This is crash-consistent
+// filesystem state, not a database transaction or a process-memory backup.
+func (e *linuxEngine) CaptureCheckpoint(ctx context.Context, id string, dst io.Writer, maxBytes int64) (err error) {
+	inst, err := e.running(id)
+	if err != nil {
+		return err
+	}
+	inst.teardownMu.Lock()
+	defer inst.teardownMu.Unlock()
+	if inst.destroying.Load() {
+		return ErrSandboxNotFound
+	}
+	// Drain host file operations before freezing, so an upload blocked on a
+	// sandbox process cannot deadlock with the freezer.
+	if err := lockSnapshotFS(ctx, inst); err != nil {
+		return err
+	}
+	defer inst.fsMu.Unlock()
+	// Thaw even if freezing, capture, or cancellation fails halfway through.
+	defer func() {
+		if thawErr := e.cgroups.Thaw(id); thawErr != nil {
+			inst.snapshotting.Store(true)
+			inst.destroying.Store(true)
+			err = errors.Join(err, ErrCheckpointThaw, thawErr)
+		}
+	}()
+	if err = e.cgroups.Freeze(ctx, id); err != nil {
+		return err
+	}
+	return exportFilesystem(ctx, inst.rootfsDir(), dst, e.sandboxCfg.UIDMapBase, e.sandboxCfg.UIDMapSize, maxBytes)
+}
+
+func lockSnapshotFS(ctx context.Context, inst *instance) error {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for !inst.fsMu.TryLock() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+	return nil
 }
 
 // exportFilesystem reads the merged overlay, so deletions and opaque overlay

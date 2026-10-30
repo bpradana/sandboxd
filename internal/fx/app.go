@@ -10,6 +10,7 @@ import (
 	"github.com/bpradana/sandboxd/internal/handler"
 	"github.com/bpradana/sandboxd/internal/helper/buildinfo"
 	"github.com/bpradana/sandboxd/internal/observability/metrics"
+	"github.com/bpradana/sandboxd/internal/preview"
 	"github.com/bpradana/sandboxd/internal/repository"
 	"github.com/bpradana/sandboxd/internal/route"
 	"github.com/bpradana/sandboxd/internal/service"
@@ -29,6 +30,7 @@ var Module = fx.Options(
 	metrics.Module,
 	repository.Module,
 	engine.Module,
+	fx.Provide(preview.NewManager),
 	service.Module,
 	handler.Module,
 	httpapi.Module,

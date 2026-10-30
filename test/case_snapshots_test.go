@@ -4,17 +4,13 @@ package e2e
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -55,6 +51,12 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
+	previewListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	previewPort := previewListener.Addr().(*net.TCPAddr).Port
+	_ = previewListener.Close()
 	logs, err := os.Create(filepath.Join(work, "daemon.log"))
 	if err != nil {
 		t.Fatal(err)
@@ -87,6 +89,7 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 			"SANDBOX_NETWORK_ENABLED=false", "SANDBOX_DEFAULT_STORAGE_MB=64", "SANDBOX_REAPER_INTERVAL=1s",
 			"SNAPSHOT_ENABLED=false", "SNAPSHOT_S3_BUCKET=", "SNAPSHOT_TIMEOUT=1m",
 			"SNAPSHOT_SETTINGS_DIR="+filepath.Join(stateDir, "cloud-storage"), "SNAPSHOT_TEMP_DIR="+filepath.Join(stateDir, "snapshot-tmp"),
+			"PREVIEW_ENABLED=true", fmt.Sprintf("PREVIEW_ADDRESS=127.0.0.1:%d", previewPort), fmt.Sprintf("PREVIEW_BASE_URL=http://localhost:%d", previewPort),
 			"SNAPSHOT_MAX_BYTES=33554432", "AWS_ACCESS_KEY_ID=snapshot-test", "AWS_SECRET_ACCESS_KEY=snapshot-test-secret", // pragma: allowlist secret -- local fixture only.
 			"AWS_EC2_METADATA_DISABLED=true")
 		if err := daemon.Start(); err != nil {
@@ -109,8 +112,12 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 	if err != nil || strings.Contains(string(stored), connection.AccessKeyID) || strings.Contains(string(stored), connection.SecretAccessKey) {
 		t.Fatal("cloud credentials were not stored encrypted")
 	}
+	s.testAutomaticBackupsAndPreview(t, previewPort)
 	source := s.createSandbox(t, presentation.CreateSandboxRequest{Env: map[string]string{"SNAPSHOT_SAVED": "yes"}, Labels: map[string]string{"task": "snapshot"}, TTLSeconds: 120})
 	s.mustSucceed(t, source.ID, "mkdir -p /workspace; echo persisted > /workspace/data; chmod 640 /workspace/data; chown 1000:1000 /workspace/data; ln /workspace/data /workspace/hardlink; ln -s /workspace/data /workspace/link; rm /etc/alpine-release")
+	// Incompressible data forces multipart transfer in both directions.
+	largeDigest := s.mustSucceed(t, source.ID, "dd if=/dev/urandom of=/workspace/large bs=1048576 count=17 2>/dev/null && sha256sum /workspace/large")
+	backupStarted := time.Now()
 	status, envelope = s.call(t, http.MethodPost, "/api/v1/sandboxes/"+source.ID+"/snapshots", presentation.CreateSnapshotRequest{Labels: map[string]string{"backup": "e2e"}})
 	requireStatus(t, status, http.StatusAccepted, envelope)
 	saved := decode[presentation.SnapshotResponse](t, envelope)
@@ -127,6 +134,10 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	if saved.SizeBytes <= 16<<20 || cloud.multipartUploads.Load() == 0 {
+		t.Fatal("large snapshot did not exercise multipart upload")
+	}
+	t.Logf("multipart backup: %.1f MiB in %s", float64(saved.SizeBytes)/(1<<20), time.Since(backupStarted).Round(time.Millisecond))
 	// Restart with an empty image store: restore must be entirely cloud-backed.
 	stop()
 	start(filepath.Join(stateDir, "empty-images"))
@@ -136,10 +147,18 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 	if items := decode[[]presentation.SnapshotResponse](t, envelope); len(items) != 1 || items[0].ID != saved.ID {
 		t.Fatalf("snapshot lost across restart: %+v", items)
 	}
+	restoreStarted := time.Now()
 	restored := s.createSandbox(t, presentation.CreateSandboxRequest{SnapshotID: saved.ID, MemoryMB: 256, TTLSeconds: 60})
+	t.Logf("ranged download, verification, extraction and sandbox startup: %s", time.Since(restoreStarted).Round(time.Millisecond))
 	output := s.mustSucceed(t, restored.ID, "test ! -e /etc/alpine-release && test /workspace/data -ef /workspace/hardlink && test \"$(readlink /workspace/link)\" = /workspace/data && test \"$(stat -c '%u:%g:%a' /workspace/data)\" = 1000:1000:640 && cat /workspace/data && printf '%s' \"$SNAPSHOT_SAVED\"")
 	if strings.TrimSpace(output) != "persisted\nyes" {
 		t.Fatalf("restored filesystem/environment: %q", output)
+	}
+	if got := s.mustSucceed(t, restored.ID, "sha256sum /workspace/large"); got != largeDigest {
+		t.Fatal("large restored file checksum differs")
+	}
+	if cloud.rangedDownloads.Load() == 0 || cloud.checksumVerifications.Load() == 0 {
+		t.Fatal("checksum verification or ranged restore was not exercised")
 	}
 	status, envelope = s.call(t, http.MethodDelete, "/api/v1/snapshots/"+saved.ID, nil)
 	requireStatus(t, status, http.StatusOK, envelope)
@@ -149,55 +168,4 @@ func TestSnapshotCloudRoundTrip(t *testing.T) {
 	requireStatus(t, status, http.StatusOK, envelope)
 	status, envelope = s.call(t, http.MethodGet, "/api/v1/snapshots", nil)
 	requireStatus(t, status, http.StatusServiceUnavailable, envelope)
-}
-
-func snapshotCloudFixture(t *testing.T) *httptest.Server {
-	t.Helper()
-	var mu sync.Mutex
-	objects := map[string][]byte{}
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Authorization"), "Credential=snapshot-ui-key/") {
-			t.Error("saved connection credentials were not used")
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		if r.URL.Query().Get("list-type") == "2" {
-			type entry struct {
-				Key string `xml:"Key"`
-			}
-			result := struct {
-				XMLName  xml.Name `xml:"ListBucketResult"`
-				Contents []entry  `xml:"Contents"`
-			}{}
-			for key := range objects {
-				result.Contents = append(result.Contents, entry{Key: strings.TrimPrefix(key, "/backups/")})
-			}
-			w.Header().Set("Content-Type", "application/xml")
-			_ = xml.NewEncoder(w).Encode(result)
-			return
-		}
-		switch r.Method {
-		case http.MethodPut:
-			data, err := io.ReadAll(r.Body)
-			if err != nil {
-				w.WriteHeader(500)
-				return
-			}
-			objects[r.URL.Path] = data
-		case http.MethodGet:
-			data, ok := objects[r.URL.Path]
-			if !ok {
-				w.Header().Set("Content-Type", "application/xml")
-				w.WriteHeader(404)
-				_, _ = io.WriteString(w, "<Error><Code>NoSuchKey</Code></Error>")
-				return
-			}
-			_, _ = w.Write(data)
-		case http.MethodDelete:
-			delete(objects, r.URL.Path)
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
 }

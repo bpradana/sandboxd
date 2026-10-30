@@ -225,6 +225,35 @@ func (m *Manager) Path(id string) string {
 	return filepath.Join(m.root, SandboxPrefix+id)
 }
 
+// Freeze stops all writers, including descendants forked during the request.
+// A successful write is only a request; wait for the kernel's frozen event.
+func (m *Manager) Freeze(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	dir := m.Path(id)
+	if err := writeFile(filepath.Join(dir, "cgroup.freeze"), "1"); err != nil {
+		return err
+	}
+	ticker := time.NewTicker(killPoll)
+	defer ticker.Stop()
+	for {
+		frozen, err := readKey(filepath.Join(dir, "cgroup.events"), "frozen")
+		if err != nil || frozen == 1 {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func (m *Manager) Thaw(id string) error {
+	return writeFile(filepath.Join(m.Path(id), "cgroup.freeze"), "0")
+}
+
 func (m *Manager) Stats(id string) (*Stats, error) {
 	dir := m.Path(id)
 	stats := &Stats{}

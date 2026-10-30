@@ -32,6 +32,8 @@ func ValidID(id string) bool { return idPattern.MatchString(id) }
 // Manifest travels with the archive, so restoring on another host needs no
 // original base image. Env is deliberately omitted from public API responses.
 type Manifest struct {
+	Mode          string            `json:"mode,omitempty"`
+	Trigger       string            `json:"trigger,omitempty"`
 	Version       int               `json:"version"`
 	ID            string            `json:"id"`
 	SandboxID     string            `json:"sandbox_id"`
@@ -47,12 +49,13 @@ type Manifest struct {
 }
 
 type SandboxConfig struct {
-	Image              string            `json:"image"`
-	Network            string            `json:"network"`
-	Limits             model.Limits      `json:"limits"`
-	Env                map[string]string `json:"env,omitempty"`
-	Labels             map[string]string `json:"labels,omitempty"`
-	IdleTimeoutSeconds int               `json:"idle_timeout_seconds"`
+	SnapshotPolicy     model.SnapshotPolicy `json:"snapshot_policy"`
+	Image              string               `json:"image"`
+	Network            string               `json:"network"`
+	Limits             model.Limits         `json:"limits"`
+	Env                map[string]string    `json:"env,omitempty"`
+	Labels             map[string]string    `json:"labels,omitempty"`
+	IdleTimeoutSeconds int                  `json:"idle_timeout_seconds"`
 }
 
 // EffectiveStatus makes an interrupted job observable after its host restarts.
@@ -70,6 +73,12 @@ type Store interface {
 	Upload(context.Context, string, io.ReadSeeker, int64, string) error
 	Download(context.Context, Manifest, io.Writer) error
 	Delete(context.Context, string) error
+}
+
+// Verifier can validate a stored archive against its local source without
+// downloading it again. Stores without this capability use a full readback.
+type Verifier interface {
+	Verify(context.Context, Manifest, io.ReaderAt) error
 }
 
 // ContextReader checks cancellation between reads, including archive/file IO.

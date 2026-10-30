@@ -3,10 +3,15 @@ package presentation
 import "time"
 
 type CreateSnapshotRequest struct {
-	Labels map[string]string `json:"labels" validate:"omitempty,max=32,dive,keys,notblank,max=63,endkeys,max=256"`
+	// KeepRunning freezes writers during capture, then resumes before upload.
+	KeepRunning bool              `json:"keep_running"`
+	Trigger     string            `json:"-"`
+	Labels      map[string]string `json:"labels" validate:"omitempty,max=32,dive,keys,notblank,max=63,endkeys,max=256"`
 }
 
 type SnapshotResponse struct {
+	Mode          string            `json:"mode,omitempty"`
+	Trigger       string            `json:"trigger,omitempty"`
 	ID            string            `json:"id"`
 	SandboxID     string            `json:"sandbox_id"`
 	Status        string            `json:"status"`

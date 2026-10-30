@@ -75,6 +75,50 @@ func TestWebUIDisabled(t *testing.T) {
 	}
 }
 
+func TestWebUIAllowsOnlyConfiguredPreviewFrames(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		preview config.PreviewConfig
+		source  string
+	}{
+		{"disabled", config.PreviewConfig{}, "'none'"},
+		{"local", config.PreviewConfig{Enabled: true, BaseURL: "http://localhost:18081"}, "http://*.localhost:18081"},
+		{"remote", config.PreviewConfig{Enabled: true, BaseURL: "https://preview.example.com"}, "https://*.preview.example.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			app := fiber.New()
+			if err := registerWebUIRoutes(webUIParams{Server: app, App: config.AppConfig{UIEnabled: true}, Preview: tc.preview}); err != nil {
+				t.Fatal(err)
+			}
+			res, err := app.Test(httptest.NewRequest(http.MethodGet, UIPath, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = res.Body.Close() }()
+			policy := res.Header.Get(fiber.HeaderContentSecurityPolicy)
+			if !strings.HasSuffix(policy, "; frame-src "+tc.source) {
+				t.Fatalf("preview frame source missing: %s", policy)
+			}
+			for _, directive := range []string{"script-src 'self'", "connect-src 'self'", "frame-ancestors 'none'"} {
+				if !strings.Contains(policy, directive) {
+					t.Fatalf("console policy weakened: %s", policy)
+				}
+			}
+		})
+	}
+}
+
+func TestWebUIRejectsInvalidPreviewFrameOrigin(t *testing.T) {
+	t.Parallel()
+	for _, base := range []string{"http://localhost;script-src:18081", "http://*.localhost:18081", "http://localhost:18081/path", "http://127.0.0.1:18081"} {
+		if err := registerWebUIRoutes(webUIParams{Server: fiber.New(), App: config.AppConfig{UIEnabled: true}, Preview: config.PreviewConfig{Enabled: true, BaseURL: base}}); err == nil {
+			t.Fatalf("invalid CSP source accepted: %s", base)
+		}
+	}
+}
+
 func TestWebUIKeepsSettingsAssetsInOneVersion(t *testing.T) {
 	t.Parallel()
 	app := newWebUIApp(t, true)
@@ -95,7 +139,7 @@ func TestWebUIKeepsSettingsAssetsInOneVersion(t *testing.T) {
 	if !strings.Contains(string(body), `href="assets/`+match[1]+`/style.css"`) {
 		t.Fatal("HTML and CSS have different asset versions")
 	}
-	for _, name := range []string{"app.js", "cloud-storage.js", "api.js", "terminal.js", "style.css"} {
+	for _, name := range []string{"app.js", "cloud-storage.js", "workspace-tools.js", "api.js", "terminal.js", "style.css"} {
 		res, err := app.Test(httptest.NewRequest(http.MethodGet, prefix+name, nil))
 		if err != nil {
 			t.Fatal(err)

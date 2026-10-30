@@ -66,3 +66,30 @@ func TestAPIKeyAuthDisabledWithoutKeys(t *testing.T) {
 		t.Fatalf("status = %d", res.StatusCode)
 	}
 }
+
+func TestAPIRejectsPreviewOriginEvenWithoutKeys(t *testing.T) {
+	t.Parallel()
+	app := newAuthApp()
+	for _, origin := range []string{"http://preview.localhost:8081", "null"} {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/", nil)
+		req.Header.Set("Origin", origin)
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("untrusted origin accepted: %s: %d", origin, res.StatusCode)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/", nil)
+	req.Header.Set("Origin", "http://localhost:8080")
+	res, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatal("same-origin console rejected")
+	}
+}

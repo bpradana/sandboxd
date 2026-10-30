@@ -37,6 +37,9 @@ func (s *service) ListImages(ctx context.Context) ([]presentation.ImageResponse,
 }
 
 func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequest) (*presentation.SandboxResponse, error) {
+	if err := s.validateSnapshotPolicy(req.SnapshotPolicy); err != nil {
+		return nil, err
+	}
 	ctx, span := tracing.SpanStart(ctx, "service.sandbox.Create")
 	defer span.End()
 
@@ -119,6 +122,13 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 
 // newSandbox applies defaults and enforces the configured maximums.
 func (s *service) newSandbox(req presentation.CreateSandboxRequest) (*model.Sandbox, error) {
+	policy := model.SnapshotPolicy{}
+	if req.SnapshotPolicy != nil {
+		policy = *req.SnapshotPolicy
+	}
+	if policy.Retain == 0 {
+		policy.Retain = 5
+	}
 	limits := model.Limits{
 		CPUMillis: orDefault(req.CPUMillis, s.sandbox.DefaultCPUMillis),
 		MemoryMB:  orDefault(req.MemoryMB, s.sandbox.DefaultMemoryMB),
@@ -159,6 +169,8 @@ func (s *service) newSandbox(req presentation.CreateSandboxRequest) (*model.Sand
 
 	now := s.now()
 	return &model.Sandbox{
+		SnapshotPolicy: policy,
+		NextSnapshotAt: nextSnapshotTime(now, policy.IntervalSeconds),
 		ID:             helper.NewID("sbx"),
 		Image:          orDefaultString(strings.TrimSpace(req.Image), s.sandbox.DefaultImage),
 		State:          consts.SandboxStateCreating,
@@ -256,7 +268,7 @@ func (s *service) destroy(ctx context.Context, id, reason string) error {
 
 	errAlreadyStopping := errors.New("already stopping")
 	sb, err := s.repo.Update(ctx, id, func(record *model.Sandbox) error {
-		if record.State == consts.SandboxStateSnapshotting {
+		if record.State == consts.SandboxStateSnapshotting || record.SnapshotInProgress && reason != consts.StopReasonExited {
 			return appctx.NewHTTPError(http.StatusConflict, "sandbox snapshot is in progress").WithErrorCode(appctx.CodeSnapshotNotReady)
 		}
 		if !record.Active() || record.State == consts.SandboxStateStopping {

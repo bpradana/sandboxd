@@ -5,7 +5,9 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/bpradana/sandboxd/internal/helper/validation"
 )
@@ -22,6 +24,34 @@ func validateSnapshotConfig(cfg SnapshotConfig) error {
 	}
 	if !filepath.IsAbs(cfg.TempDir) || !filepath.IsAbs(cfg.SettingsDir) || cfg.Timeout <= 0 || cfg.MaxConcurrent <= 0 || cfg.MaxBytes <= 0 || cfg.MaxBytes > 4<<30 {
 		return fmt.Errorf("snapshot temp directory must be absolute, timeout and concurrency positive, and SNAPSHOT_MAX_BYTES between 1 and 4294967296")
+	}
+	return nil
+}
+
+var previewHostname = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$`)
+
+// FrameSource returns the exact wildcard origin permitted to embed previews.
+// Validate the hostname before using configuration in an HTTP CSP header.
+func (cfg PreviewConfig) FrameSource() (string, error) {
+	if !cfg.Enabled {
+		return "'none'", nil
+	}
+	u, err := url.Parse(cfg.BaseURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" || net.ParseIP(u.Hostname()) != nil || !previewHostname.MatchString(u.Hostname()) || len(u.Hostname()) > 200 {
+		return "", fmt.Errorf("PREVIEW_BASE_URL must be an http(s) URL with a DNS hostname supporting wildcard subdomains, without a path or credentials")
+	}
+	return u.Scheme + "://*." + strings.ToLower(u.Host), nil
+}
+
+func validatePreviewConfig(cfg PreviewConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if _, err := cfg.FrameSource(); err != nil {
+		return err
+	}
+	if _, _, err := net.SplitHostPort(cfg.Address); err != nil || cfg.TTL <= 0 || cfg.TTL > 24*time.Hour || cfg.MaxSessions < 1 {
+		return fmt.Errorf("PREVIEW_ADDRESS must be host:port, PREVIEW_TTL between 0 and 24h, and PREVIEW_MAX_SESSIONS positive")
 	}
 	return nil
 }

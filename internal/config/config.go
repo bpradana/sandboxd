@@ -16,6 +16,17 @@ type Config struct {
 	Exec      ExecConfig
 	Network   NetworkConfig
 	Snapshot  SnapshotConfig
+	Preview   PreviewConfig
+}
+
+// PreviewConfig uses a separate listener and a unique subdomain for every session,
+// keeping untrusted application JavaScript away from the console's origin.
+type PreviewConfig struct {
+	Enabled     bool
+	Address     string
+	BaseURL     string
+	TTL         time.Duration
+	MaxSessions int
 }
 
 // SnapshotConfig configures full filesystem backups in S3-compatible storage.
@@ -151,6 +162,13 @@ func Load() (Config, error) {
 	appEnv := getEnv("APP_ENV", "development")
 	stateDir := getEnv("SANDBOX_STATE_DIR", "/var/lib/sandboxd")
 	cfg := Config{
+		Preview: PreviewConfig{
+			Enabled:     getEnvAsBool("PREVIEW_ENABLED", false),
+			Address:     getEnv("PREVIEW_ADDRESS", "0.0.0.0:8081"),
+			BaseURL:     getEnv("PREVIEW_BASE_URL", "http://localhost:8081"),
+			TTL:         getEnvAsDuration("PREVIEW_TTL", time.Hour),
+			MaxSessions: getEnvAsInt("PREVIEW_MAX_SESSIONS", 128),
+		},
 		App: AppConfig{
 			Name:        getEnv("APP_NAME", "sandboxd"),
 			Env:         appEnv,
@@ -265,6 +283,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := validateSnapshotConfig(cfg.Snapshot); err != nil {
+		return Config{}, err
+	}
+	if err := validatePreviewConfig(cfg.Preview); err != nil {
 		return Config{}, err
 	}
 

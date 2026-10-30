@@ -5,6 +5,7 @@ package engine
 import (
 	"context"
 	"io"
+	"net"
 	"os"
 	"runtime"
 
@@ -51,6 +52,14 @@ func (u *unsupported) Destroy(context.Context, string) error { return ErrUnsuppo
 
 func (u *unsupported) CaptureSnapshot(context.Context, string, io.Writer, int64) error {
 	return ErrUnsupportedPlatform
+}
+
+func (u *unsupported) CaptureCheckpoint(context.Context, string, io.Writer, int64) error {
+	return ErrUnsupportedPlatform
+}
+
+func (u *unsupported) DialSandbox(context.Context, string, int) (net.Conn, error) {
+	return nil, ErrUnsupportedPlatform
 }
 
 func (u *unsupported) Stats(context.Context, string) (*Stats, error) {

@@ -1843,9 +1843,226 @@
                     }
                 }
             }
+        },
+        "/sandboxes/{id}/previews": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "previews"
+                ],
+                "summary": "Open an isolated HTTP and WebSocket app preview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "HTTP port inside the sandbox",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CreatePreviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.PreviewEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "previews"
+                ],
+                "summary": "Close an app preview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Preview session",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.RevokePreviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{id}/snapshot-policy": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Configure scheduled and pre-expiry backups",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Backup policy; zero interval disables scheduled backups",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.SnapshotPolicy"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SandboxEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "model.SnapshotPolicy": {
+            "type": "object",
+            "properties": {
+                "before_expiry": {
+                    "type": "boolean"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "maximum": 86400,
+                    "minimum": 60
+                },
+                "retain": {
+                    "type": "integer",
+                    "maximum": 100,
+                    "minimum": 1
+                }
+            }
+        },
         "presentation.BuildInfoDoc": {
             "type": "object",
             "properties": {
@@ -1991,6 +2208,20 @@
                 }
             }
         },
+        "presentation.CreatePreviewRequest": {
+            "type": "object",
+            "required": [
+                "port"
+            ],
+            "properties": {
+                "port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "example": 3000
+                }
+            }
+        },
         "presentation.CreateSandboxRequest": {
             "type": "object",
             "properties": {
@@ -2052,6 +2283,9 @@
                     "type": "string",
                     "maxLength": 64
                 },
+                "snapshot_policy": {
+                    "$ref": "#/definitions/model.SnapshotPolicy"
+                },
                 "storage_mb": {
                     "description": "StorageMB caps the writable layer; writes beyond it fail with ENOSPC.",
                     "type": "integer",
@@ -2105,6 +2339,10 @@
         "presentation.CreateSnapshotRequest": {
             "type": "object",
             "properties": {
+                "keep_running": {
+                    "description": "KeepRunning freezes writers during capture, then resumes before upload.",
+                    "type": "boolean"
+                },
                 "labels": {
                     "type": "object",
                     "additionalProperties": {
@@ -2477,6 +2715,34 @@
                 }
             }
         },
+        "presentation.PreviewEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/preview.Session"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
         "presentation.ReadinessResponseDoc": {
             "type": "object",
             "properties": {
@@ -2499,6 +2765,17 @@
                     "description": "Status is ok when the sandbox engine is ready, otherwise unhealthy.",
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "presentation.RevokePreviewRequest": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
                 }
             }
         },
@@ -2600,12 +2877,27 @@
                 "last_activity_at": {
                     "type": "string"
                 },
+                "last_snapshot_at": {
+                    "type": "string"
+                },
+                "last_snapshot_error": {
+                    "type": "string"
+                },
                 "limits": {
                     "$ref": "#/definitions/presentation.LimitsResponse"
                 },
                 "network": {
                     "type": "string",
                     "example": "none"
+                },
+                "next_snapshot_at": {
+                    "type": "string"
+                },
+                "snapshot_in_progress": {
+                    "type": "boolean"
+                },
+                "snapshot_policy": {
+                    "$ref": "#/definitions/model.SnapshotPolicy"
                 },
                 "state": {
                     "type": "string",
@@ -2876,6 +3168,9 @@
                         "type": "string"
                     }
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "sandbox_id": {
                     "type": "string"
                 },
@@ -2886,6 +3181,9 @@
                     "type": "integer"
                 },
                 "status": {
+                    "type": "string"
+                },
+                "trigger": {
                     "type": "string"
                 }
             }
@@ -2984,6 +3282,23 @@
                     "example": "4"
                 }
             }
+        },
+        "preview.Session": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
         }
     },
     "securityDefinitions": {
@@ -3020,8 +3335,12 @@
             "name": "files"
         },
         {
-            "description": "Save-and-stop filesystem backups in S3-compatible storage and restore into new sandboxes.",
+            "description": "Filesystem backups, live checkpoints, automatic backup policies and restores in S3-compatible storage.",
             "name": "snapshots"
+        },
+        {
+            "description": "Isolated HTTP and WebSocket application previews on sandbox-local ports.",
+            "name": "previews"
         }
     ]
 }

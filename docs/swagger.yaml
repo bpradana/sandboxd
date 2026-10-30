@@ -1,5 +1,18 @@
 basePath: /
 definitions:
+  model.SnapshotPolicy:
+    properties:
+      before_expiry:
+        type: boolean
+      interval_seconds:
+        maximum: 86400
+        minimum: 60
+        type: integer
+      retain:
+        maximum: 100
+        minimum: 1
+        type: integer
+    type: object
   presentation.BuildInfoDoc:
     properties:
       build_time:
@@ -104,6 +117,16 @@ definitions:
       updated_at:
         type: string
     type: object
+  presentation.CreatePreviewRequest:
+    properties:
+      port:
+        example: 3000
+        maximum: 65535
+        minimum: 1
+        type: integer
+    required:
+    - port
+    type: object
   presentation.CreateSandboxRequest:
     properties:
       cpu_millis:
@@ -156,6 +179,8 @@ definitions:
           with image.
         maxLength: 64
         type: string
+      snapshot_policy:
+        $ref: '#/definitions/model.SnapshotPolicy'
       storage_mb:
         description: StorageMB caps the writable layer; writes beyond it fail with
           ENOSPC.
@@ -200,6 +225,10 @@ definitions:
     type: object
   presentation.CreateSnapshotRequest:
     properties:
+      keep_running:
+        description: KeepRunning freezes writers during capture, then resumes before
+          upload.
+        type: boolean
       labels:
         additionalProperties:
           type: string
@@ -479,6 +508,25 @@ definitions:
     required:
     - path
     type: object
+  presentation.PreviewEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/preview.Session'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
   presentation.ReadinessResponseDoc:
     properties:
       build:
@@ -494,6 +542,13 @@ definitions:
         description: Status is ok when the sandbox engine is ready, otherwise unhealthy.
         example: ok
         type: string
+    type: object
+  presentation.RevokePreviewRequest:
+    properties:
+      id:
+        type: string
+    required:
+    - id
     type: object
   presentation.SandboxEnvelopeDoc:
     properties:
@@ -564,11 +619,21 @@ definitions:
         type: object
       last_activity_at:
         type: string
+      last_snapshot_at:
+        type: string
+      last_snapshot_error:
+        type: string
       limits:
         $ref: '#/definitions/presentation.LimitsResponse'
       network:
         example: none
         type: string
+      next_snapshot_at:
+        type: string
+      snapshot_in_progress:
+        type: boolean
+      snapshot_policy:
+        $ref: '#/definitions/model.SnapshotPolicy'
       state:
         example: running
         type: string
@@ -762,6 +827,8 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      mode:
+        type: string
       sandbox_id:
         type: string
       sha256:
@@ -769,6 +836,8 @@ definitions:
       size_bytes:
         type: integer
       status:
+        type: string
+      trigger:
         type: string
     type: object
   presentation.TerminalControlMessage:
@@ -837,6 +906,17 @@ definitions:
       value:
         description: Value is the rejected field value, when available.
         example: "4"
+        type: string
+    type: object
+  preview.Session:
+    properties:
+      expires_at:
+        type: string
+      id:
+        type: string
+      port:
+        type: integer
+      url:
         type: string
     type: object
 info:
@@ -2078,6 +2158,133 @@ paths:
       summary: Readiness probe
       tags:
       - health
+  /sandboxes/{id}/previews:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Sandbox ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Preview session
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.RevokePreviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Close an app preview
+      tags:
+      - previews
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Sandbox ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: HTTP port inside the sandbox
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.CreatePreviewRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presentation.PreviewEnvelopeDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Open an isolated HTTP and WebSocket app preview
+      tags:
+      - previews
+  /sandboxes/{id}/snapshot-policy:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Sandbox ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Backup policy; zero interval disables scheduled backups
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.SnapshotPolicy'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.SandboxEnvelopeDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Configure scheduled and pre-expiry backups
+      tags:
+      - snapshots
 schemes:
 - http
 - https
@@ -2101,6 +2308,8 @@ tags:
   name: sessions
 - description: File upload, download, listing, and management inside a sandbox.
   name: files
-- description: Save-and-stop filesystem backups in S3-compatible storage and restore
-    into new sandboxes.
+- description: Filesystem backups, live checkpoints, automatic backup policies and
+    restores in S3-compatible storage.
   name: snapshots
+- description: Isolated HTTP and WebSocket application previews on sandbox-local ports.
+  name: previews

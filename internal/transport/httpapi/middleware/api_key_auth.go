@@ -22,12 +22,18 @@ func NewAPIKeyAuthMiddleware(app config.AppConfig, logger *logging.Logger) fiber
 	keys := newAPIKeys(app.APIKeys)
 	if keys.empty() {
 		logger.Warn("APP_API_KEYS is empty: the sandbox API is unauthenticated")
-		return func(c fiber.Ctx) error {
-			return c.Next()
-		}
 	}
 
 	return func(c fiber.Ctx) error {
+		// CORS only prevents reading responses. Reject browser requests from
+		// other origins too, so untrusted preview apps cannot submit blind
+		// mutations against an unauthenticated development API.
+		if origin := c.Get(fiber.HeaderOrigin); origin != "" && !originAllowed(origin, c.Host(), app.CORSOrigins) {
+			return appctx.ErrOriginNotAllowed()
+		}
+		if keys.empty() {
+			return c.Next()
+		}
 		token, ok := bearerToken(c.Get(fiber.HeaderAuthorization))
 		if !ok {
 			c.Set(fiber.HeaderWWWAuthenticate, `Bearer realm="sandboxd"`)
