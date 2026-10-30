@@ -91,6 +91,19 @@ func (s *Store) Remove(name string) error {
 // nodes are skipped, setuid/setgid bits are stripped, and ownership is shifted
 // into the sandbox id range.
 func (s *Store) Import(ctx context.Context, name string, src io.Reader) error {
+	return s.importArchive(ctx, name, src, 0)
+}
+
+// ImportSnapshot bounds decompressed data, including tar headers, so a small
+// compressed object cannot exhaust the host disk during restore.
+func (s *Store) ImportSnapshot(ctx context.Context, name string, src io.Reader, maxBytes int64) error {
+	if maxBytes <= 0 {
+		return fmt.Errorf("snapshot expansion limit must be positive")
+	}
+	return s.importArchive(ctx, name, src, maxBytes)
+}
+
+func (s *Store) importArchive(ctx context.Context, name string, src io.Reader, maxBytes int64) error {
 	if !ValidName(name) {
 		return ErrInvalidName
 	}
@@ -113,7 +126,7 @@ func (s *Store) Import(ctx context.Context, name string, src io.Reader) error {
 		}
 	}()
 
-	if err := s.extract(ctx, tmp, src); err != nil {
+	if err := s.extract(ctx, tmp, src, maxBytes); err != nil {
 		return err
 	}
 	if err := os.Chmod(tmp, 0o755); err != nil { // #nosec G302 -- image root becomes the sandbox's "/".
@@ -129,10 +142,16 @@ func (s *Store) Import(ctx context.Context, name string, src io.Reader) error {
 	return nil
 }
 
-func (s *Store) extract(ctx context.Context, root string, src io.Reader) error {
+func (s *Store) extract(ctx context.Context, root string, src io.Reader, maxBytes int64) error {
 	reader, err := decompress(src)
 	if err != nil {
 		return err
+	}
+	if closer, ok := reader.(io.Closer); ok {
+		defer func() { _ = closer.Close() }()
+	}
+	if maxBytes > 0 {
+		reader = &expansionReader{reader: reader, remaining: maxBytes}
 	}
 	rootfd, err := unix.Open(root, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -181,6 +200,23 @@ func (s *Store) extract(ctx context.Context, root string, src io.Reader) error {
 		_ = unix.Close(dirfd)
 	}
 	return nil
+}
+
+type expansionReader struct {
+	reader    io.Reader
+	remaining int64
+}
+
+func (r *expansionReader) Read(p []byte) (int, error) {
+	if r.remaining <= 0 {
+		return 0, fmt.Errorf("snapshot expansion limit exceeded")
+	}
+	if int64(len(p)) > r.remaining {
+		p = p[:r.remaining]
+	}
+	n, err := r.reader.Read(p)
+	r.remaining -= int64(n)
+	return n, err
 }
 
 func (s *Store) extractEntry(rootfd int, name string, header *tar.Header, content io.Reader) error {

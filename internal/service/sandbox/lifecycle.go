@@ -44,6 +44,16 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 		tracing.RecordError(span, err)
 		return nil, mapError(err)
 	}
+	var archivePath string
+	if req.SnapshotID != "" {
+		var cleanup func()
+		var err error
+		req, archivePath, cleanup, err = s.prepareRestore(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+	}
 
 	sb, err := s.newSandbox(req)
 	if err != nil {
@@ -61,12 +71,14 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), createTimeout)
 	defer cancel()
 	info, err := s.engine.Create(createCtx, engine.Spec{
-		ID:       sb.ID,
-		Image:    sb.Image,
-		Hostname: "sandbox",
-		Network:  sb.Network,
-		Limits:   sb.Limits,
-		Env:      sb.Env,
+		ID:               sb.ID,
+		Image:            sb.Image,
+		Hostname:         "sandbox",
+		Network:          sb.Network,
+		Limits:           sb.Limits,
+		Env:              sb.Env,
+		SnapshotArchive:  archivePath,
+		SnapshotMaxBytes: s.snapshotCfg.MaxBytes,
 	})
 	if err != nil {
 		tracing.RecordError(span, err)
@@ -77,6 +89,9 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 	}
 
 	updated, err := s.repo.Update(ctx, sb.ID, func(record *model.Sandbox) error {
+		if record.State != consts.SandboxStateCreating {
+			return appctx.ErrSandboxNotRunning()
+		}
 		record.State = consts.SandboxStateRunning
 		record.IPAddress = info.IPAddress
 		record.LastActivityAt = s.now()
@@ -84,6 +99,9 @@ func (s *service) Create(ctx context.Context, req presentation.CreateSandboxRequ
 	})
 	if err != nil {
 		tracing.RecordError(span, err)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), s.sandbox.DestroyTimeout)
+		defer cleanupCancel()
+		_ = s.engine.Destroy(cleanupCtx, sb.ID)
 		return nil, mapError(err)
 	}
 
@@ -238,6 +256,9 @@ func (s *service) destroy(ctx context.Context, id, reason string) error {
 
 	errAlreadyStopping := errors.New("already stopping")
 	sb, err := s.repo.Update(ctx, id, func(record *model.Sandbox) error {
+		if record.State == consts.SandboxStateSnapshotting {
+			return appctx.NewHTTPError(http.StatusConflict, "sandbox snapshot is in progress").WithErrorCode(appctx.CodeSnapshotNotReady)
+		}
 		if !record.Active() || record.State == consts.SandboxStateStopping {
 			return errAlreadyStopping
 		}

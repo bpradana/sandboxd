@@ -350,12 +350,32 @@ func composeEnv(user identity, overrides map[string]string) []string {
 
 // root opens the sandbox filesystem for a file operation. New entries are
 // owned by the sandbox user.
-func (e *linuxEngine) root(id string) (*fsops.Root, error) {
+type lockedRoot struct {
+	*fsops.Root
+	unlock func()
+}
+
+func (r *lockedRoot) Close() error {
+	defer r.unlock()
+	return r.Root.Close()
+}
+
+func (e *linuxEngine) root(id string) (*lockedRoot, error) {
 	inst, err := e.running(id)
 	if err != nil {
 		return nil, err
 	}
-	return fsops.OpenRoot(inst.rootfsDir(), e.sandboxCfg.UIDMapBase+e.sandboxCfg.ExecUID, e.sandboxCfg.UIDMapBase+e.sandboxCfg.ExecGID)
+	inst.fsMu.RLock()
+	if inst.destroying.Load() {
+		inst.fsMu.RUnlock()
+		return nil, ErrSandboxNotFound
+	}
+	root, err := fsops.OpenRoot(inst.rootfsDir(), e.sandboxCfg.UIDMapBase+e.sandboxCfg.ExecUID, e.sandboxCfg.UIDMapBase+e.sandboxCfg.ExecGID)
+	if err != nil {
+		inst.fsMu.RUnlock()
+		return nil, err
+	}
+	return &lockedRoot{Root: root, unlock: inst.fsMu.RUnlock}, nil
 }
 
 func (e *linuxEngine) OpenFile(_ context.Context, id, path string) (io.ReadCloser, *FileInfo, error) {

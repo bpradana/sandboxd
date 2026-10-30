@@ -115,6 +115,26 @@ func TestCreateAppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestCreateDoesNotResurrectConcurrentDelete(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.engine.EXPECT().Ready().Return(nil)
+	f.engine.EXPECT().Destroy(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	f.engine.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, spec engine.Spec) (*engine.Info, error) {
+		if err := f.svc.Destroy(ctx, spec.ID); err != nil {
+			t.Fatalf("concurrent delete: %v", err)
+		}
+		return &engine.Info{InitPID: 42}, nil
+	})
+	if _, err := f.svc.Create(context.Background(), presentation.CreateSandboxRequest{}); httpStatus(err) != http.StatusConflict {
+		t.Fatalf("creation resurrected a deleted sandbox: %v", err)
+	}
+	items, err := f.repo.List(context.Background(), sandboxrepository.Filter{})
+	if err != nil || len(items) != 1 || items[0].State != consts.SandboxStateStopped || items[0].StoppedAt == nil {
+		t.Fatalf("deleted sandbox changed: %+v, %v", items, err)
+	}
+}
+
 func TestCreateRejectsLimitsAboveMaximum(t *testing.T) {
 	t.Parallel()
 

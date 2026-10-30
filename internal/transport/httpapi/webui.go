@@ -31,9 +31,13 @@ type webUIParams struct {
 // registerWebUIRoutes serves the web console. It is static and public, like
 // the OpenAPI document; everything it does goes through /api/v1 with the
 // key the user enters.
-func registerWebUIRoutes(params webUIParams) {
+func registerWebUIRoutes(params webUIParams) error {
 	if !params.App.UIEnabled {
-		return
+		return nil
+	}
+	console, err := web.LoadConsole()
+	if err != nil {
+		return err
 	}
 
 	params.Server.Get("/", func(c fiber.Ctx) error {
@@ -49,6 +53,19 @@ func registerWebUIRoutes(params webUIParams) {
 		c.Set(fiber.HeaderXContentTypeOptions, "nosniff")
 		c.Set(fiber.HeaderXFrameOptions, "DENY")
 		c.Set(fiber.HeaderReferrerPolicy, "no-referrer")
+		// HTML and legacy asset URLs must not be reused across daemon builds.
+		c.Set(fiber.HeaderCacheControl, "no-store")
 		return c.Next()
-	}, static.New("", static.Config{FS: web.FS()}))
+	})
+	index := func(c fiber.Ctx) error {
+		c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
+		return c.Send(console.Index)
+	}
+	params.Server.Get(UIPath, index)
+	params.Server.Get(UIPath+"index.html", index)
+	// Relative module imports stay within this versioned directory, so app.js,
+	// cloud-storage.js, terminal.js and their shared api.js always agree.
+	params.Server.Use(UIPath+"assets/"+console.Version+"/", static.New("", static.Config{FS: console.FS, MaxAge: 31536000}))
+	params.Server.Use(UIPath, static.New("", static.Config{FS: console.FS}))
+	return nil
 }

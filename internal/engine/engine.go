@@ -50,6 +50,10 @@ type Spec struct {
 	Network  string
 	Limits   model.Limits
 	Env      map[string]string
+	// SnapshotArchive is a verified, daemon-owned full filesystem archive.
+	// It is imported into a private lower layer instead of resolving Image.
+	SnapshotArchive  string
+	SnapshotMaxBytes int64
 }
 
 // Info reports what the engine allocated for a new sandbox.
@@ -187,6 +191,9 @@ type Engine interface {
 
 	Create(ctx context.Context, spec Spec) (*Info, error)
 	Destroy(ctx context.Context, id string) error
+	// CaptureSnapshot stops every process and writes a full gzip tar archive.
+	// Resources remain allocated until Destroy, including on capture failure.
+	CaptureSnapshot(ctx context.Context, id string, dst io.Writer, maxBytes int64) error
 	Stats(ctx context.Context, id string) (*Stats, error)
 
 	Exec(ctx context.Context, id string, req ExecRequest, out OutputFunc) (*ExecResult, error)

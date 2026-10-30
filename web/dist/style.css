@@ -38,6 +38,16 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.settings-heading, .settings-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.settings-heading { justify-content: space-between; }
+.settings-nav [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+#cloud-storage-form, #cloud-fields, #cloud-credentials { display: flex; flex-direction: column; gap: 10px; }
+#cloud-fields, #cloud-credentials { border: 0; padding: 0; margin: 0; min-width: 0; }
+#cloud-credentials-help, #cloud-identity-help { margin: 0; font-size: 12px; }
+.checkbox { flex-direction: row; align-items: center; }
+.checkbox input { width: auto; }
 
 html, body { height: 100%; margin: 0; }
 
@@ -136,7 +146,7 @@ details.panel > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 details.panel[open] > summary { margin-bottom: 10px; }
 
 #create-form { display: flex; flex-direction: column; gap: 10px; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 
 .segmented { border: 0; padding: 0; margin: 0; display: flex; gap: 6px; align-items: center; }
 .segmented legend { font-size: 12px; color: var(--muted); float: left; margin-right: 6px; padding: 0; }
@@ -171,8 +181,8 @@ details.panel[open] > summary { margin-bottom: 10px; }
 .sandbox-meta { font-size: 12px; color: var(--muted); }
 
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; text-transform: lowercase; }
-.badge.running { color: var(--ok); }
-.badge.creating, .badge.stopping { color: var(--warn); }
+.badge.running, .badge.ready { color: var(--ok); }
+.badge.creating, .badge.stopping, .badge.snapshotting, .badge.capturing, .badge.uploading { color: var(--warn); }
 .badge.failed { color: var(--danger); }
 .badge.stopped { color: var(--muted); }
 
@@ -262,7 +272,7 @@ dialog {
 dialog::backdrop { background: rgb(0 0 0 / .5); }
 dialog h2 { font-size: 15px; margin-bottom: 6px; }
 dialog p { font-size: 13px; margin: 0 0 12px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
 .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 10; max-width: calc(100vw - 32px); }
 .toast {

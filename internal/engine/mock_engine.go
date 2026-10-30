@@ -42,6 +42,20 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
 }
 
+// CaptureSnapshot mocks base method.
+func (m *MockEngine) CaptureSnapshot(ctx context.Context, id string, dst io.Writer, maxBytes int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CaptureSnapshot", ctx, id, dst, maxBytes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CaptureSnapshot indicates an expected call of CaptureSnapshot.
+func (mr *MockEngineMockRecorder) CaptureSnapshot(ctx, id, dst, maxBytes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CaptureSnapshot", reflect.TypeOf((*MockEngine)(nil).CaptureSnapshot), ctx, id, dst, maxBytes)
+}
+
 // CloseSession mocks base method.
 func (m *MockEngine) CloseSession(ctx context.Context, id, sessionID string) error {
 	m.ctrl.T.Helper()

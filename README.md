@@ -76,6 +76,7 @@ $ curl -s -XPOST localhost:8080/api/v1/sandboxes/sbx-1f0c…/exec \
 | 💾 **Disk-backed storage** | Each sandbox gets its own ext4 or btrfs filesystem in a sparse image file, capped at its storage size and allocated as data is written. tmpfs is available as an alternative. |
 | ⚡ **Three ways to run code** | One-shot `exec` (buffered or streamed as Server-Sent Events), persistent shell sessions that keep state between calls, and interactive PTY terminals over WebSocket that survive disconnects. |
 | 📁 **Safe file API** | Upload, download, list, stat, mkdir, and remove. Every path resolves inside the sandbox, including through symlinks. |
+| ☁️ **Cloud filesystem snapshots** | Save-and-stop a sandbox into S3-compatible storage, then restore its files, installed packages, and configuration on the same host or another host of the same architecture. |
 | 🌐 **Controlled networking** | `none` (loopback only) or `egress` (internet through NAT, with private, link-local, cloud-metadata, and host addresses blocked). |
 | 🧹 **Automatic cleanup** | Sandboxes are reaped at their TTL or when idle. Shutdown destroys every sandbox, and startup removes anything a crash left behind. |
 | 🖥️ **Web console** | Create, monitor, extend, and kill sandboxes from the browser, with terminal tabs that persist across page reloads. |
@@ -417,6 +418,114 @@ in any sandbox, so expose the console accordingly.
 
 ## API
 
+### Cloud filesystem snapshots
+
+Open **Settings → Cloud storage** in the console to connect a bucket. Choose
+**Access keys** to enter a key, secret and optional session token, or **Server
+identity** to use credentials already configured on the daemon. Enter the bucket,
+region, optional S3-compatible endpoint and prefix. **Test connection** verifies
+list, write, read and delete access with a temporary object without saving
+the connection. **Save connection** repeats the test, saves the settings encrypted, and
+enables snapshots immediately; it does not require `SNAPSHOT_ENABLED=true` or a
+daemon restart.
+
+Failed tests identify the S3 operation and provide a safe diagnosis for common
+permission, credential, region, bucket and network errors. Provider messages and
+credentials are never included in these errors.
+
+Settings apply to the whole deployment. The existing API-key policy protects
+the connection endpoints; any accepted key can manage this connection. Credentials
+are never returned by the settings API or stored in browser storage. Saved access
+keys can be reused by leaving all credential fields blank, or replaced by entering
+a new access key and secret. **Disconnect** forgets saved credentials and disables
+snapshots without deleting cloud backups. Connection changes are refused with
+**409** while snapshot operations use the current destination.
+
+The daemon stores `connection.enc` and a generated `encryption.key` under
+`SNAPSHOT_SETTINGS_DIR` (default `$SANDBOX_STATE_DIR/cloud-storage`). Settings
+use AES-256-GCM encryption, owner-only files (`0600`), and a private directory
+(`0700`). Keep both files when moving the daemon's persistent state. Missing keys,
+invalid permissions or tampered ciphertext prevent loading saved settings; the
+daemon does not silently fall back to another destination. A saved connection
+takes precedence over environment configuration, and an explicit disconnect
+remains disconnected after restart. This uses local files and S3 objects;
+there is no database or migration.
+
+For environment-only configuration, enable `SNAPSHOT_ENABLED=true`, set
+`SNAPSHOT_S3_BUCKET` and `SNAPSHOT_S3_REGION`, and give the daemon access to that
+bucket. Server identity uses
+the [AWS SDK credential chain](https://docs.aws.amazon.com/sdk-for-go/v2/developer-guide/configure-gosdk.html):
+environment variables, shared profiles, or workload/instance roles. Credentials
+are never passed into sandboxes. For another S3-compatible provider, set
+`SNAPSHOT_S3_ENDPOINT`; enable `SNAPSHOT_S3_PATH_STYLE` if required by that provider.
+The bucket must already exist. Required permissions are `s3:ListBucket` on the
+bucket and `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` under the configured
+prefix. Bucket encryption and lifecycle/versioning settings remain under the
+operator's control; with versioning enabled, deleting a snapshot creates delete
+markers and the bucket lifecycle governs removal of older versions.
+
+```sh
+API=https://sandboxd.example.com/api/v1
+AUTH="Authorization: Bearer $SANDBOXD_KEY"
+
+# Save-and-stop: this ends all commands, sessions, and terminals.
+SNAP=$(curl -sf -H "$AUTH" -XPOST "$API/sandboxes/$ID/snapshots" \
+  -d '{"labels":{"task":"research"}}' | jq -r .data.id)
+
+# Poll until status is ready (capturing → uploading → ready, or failed).
+curl -sf -H "$AUTH" "$API/snapshots/$SNAP" | jq .data
+
+# Restore as a new sandbox with a fresh TTL. Resource overrides are optional.
+curl -sf -H "$AUTH" -XPOST "$API/sandboxes" \
+  -d "{\"snapshot_id\":\"$SNAP\",\"memory_mb\":1024,\"ttl_seconds\":1800}"
+
+curl -sf -H "$AUTH" "$API/snapshots" | jq .data
+curl -sf -H "$AUTH" -XDELETE "$API/snapshots/$SNAP"
+```
+
+Save requests return **202** and put the source sandbox into `snapshotting`.
+The daemon kills its processes, drains file operations, and archives the merged
+filesystem before unmounting anything. The archive includes the base filesystem,
+so restoring needs no original base image. SHA-256 and size are checked after
+upload and again on download. The source filesystem is removed only after a
+verified backup has been committed as `ready`.
+
+If capture or upload fails, the source becomes `failed` but retains its filesystem
+and capacity reservation. Retry `POST /sandboxes/{id}/snapshots`, or delete the
+source to free its resources. Its original expiry and idle timeout still apply.
+The original processes cannot be resumed. During capture/upload, deleting the
+source or the snapshot returns **409**. An interrupted cloud job is reported as
+`failed` after its deadline, including when the daemon restarts. Ready cloud
+snapshots survive daemon restarts and can be listed/restored by another daemon
+using the same bucket and prefix.
+
+Restores inherit CPU, memory, writable storage, PID limits, network, environment,
+labels, and idle timeout unless overridden. Environment overrides merge with the
+saved environment; supplied labels replace saved labels. TTL starts fresh, and
+this host's resource maximums and egress policy still apply. `image` and
+`snapshot_id` are mutually exclusive. Restored files become a read-only lower
+layer; `storage_mb` limits subsequent writes, independently of the saved files.
+
+Snapshots save **filesystem state**, not RAM, running processes, shell state, or
+terminal sessions. They exclude `/proc`, `/sys`, `/dev`, `/run`, device nodes,
+FIFOs, and sockets. Ownership, permission bits, symlinks, hardlinks, and mtimes are
+preserved; setuid/setgid bits are stripped, and xattrs/ACLs are not saved. Capture
+stops processes abruptly, giving a filesystem-consistent backup; applications
+such as databases should flush/checkpoint before requesting it. Snapshot manifests
+include sandbox environment variables, and archives contain all saved files;
+apply the same bucket access policy you use for that data.
+
+`SNAPSHOT_TIMEOUT` bounds each backup/download job (default **30m**).
+`SNAPSHOT_MAX_BYTES` caps both compressed archives and expanded tar streams
+(default and maximum **4 GiB**). `SNAPSHOT_MAX_CONCURRENT` bounds capture/upload
+and restore work per daemon (default **2**). Scratch archives use
+`SNAPSHOT_TEMP_DIR` (default `$SANDBOX_STATE_DIR/snapshot-tmp`) and are removed
+after success or failure. Restoring also creates a private expanded lower layer
+under the new sandbox directory, retained until that sandbox is destroyed. Allow
+host disk space for archives, expanded files, and the sandbox's writable storage.
+
+### API reference
+
 The base path is `/api/v1`. The full OpenAPI specification is served at `/openapi.json`
 and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
 
@@ -433,6 +542,10 @@ and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
 | `GET` · `PUT` · `DELETE /sandboxes/{id}/files?path=` | Download, upload (raw body), remove |
 | `GET …/files/list` · `GET …/files/stat` · `POST …/files/mkdir` | Directory operations |
 | `POST /sandboxes/{id}/terminal/tickets` · `GET /sandboxes/{id}/terminal` | Interactive terminal (WebSocket) |
+| `POST /sandboxes/{id}/snapshots` | Asynchronously save-and-stop a filesystem snapshot |
+| `GET /snapshots` · `GET /snapshots/{id}` · `DELETE /snapshots/{id}` | List, inspect progress, or delete cloud snapshots |
+| `GET` · `PUT` · `DELETE /settings/cloud-storage` | Inspect, test-and-save, or disconnect deployment-wide cloud storage |
+| `POST /settings/cloud-storage/test` | Test a candidate connection without saving credentials |
 
 ### Examples
 
@@ -724,6 +837,7 @@ macOS and Linux.
 | Start · stop · logs · shell | `mise run dev up` · `down` · `logs` · `shell` |
 | Unit tests | `mise run test [--race] [--coverage]` |
 | End-to-end tests (real kernel) | `mise run docker e2e` (`SANDBOXD_E2E_INTERNET=1` adds internet checks) |
+| Cloud snapshot round trip (real kernel, local S3 fixture, Alpine image required) | `docker compose run --rm -e SANDBOXD_E2E_SNAPSHOTS=1 sandboxd-test go test -v -count=1 -tags=e2e -run TestSnapshotCloudRoundTrip ./test/...` |
 | Format and lint (linux and darwin) | `mise run fmt --check`, `mise run lint --ci` |
 | Everything CI runs | `mise run check` |
 | Regenerate the OpenAPI spec and mocks | `mise run docs`, `mise run generate all` |
@@ -734,7 +848,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and the pull request proc
 ## Known limitations
 
 - **Shared kernel.** Container-grade isolation, not a VM (see [Security model](#security-model)).
-- **No persistence.** Sandboxes end when the daemon restarts. One daemon is one host;
+- **No live persistence.** Running sandboxes end when the daemon restarts; ready cloud
+  filesystem snapshots can be restored into new sandboxes. One daemon is one host;
   there is no clustering.
 - **Single tenant.** All API keys have equal, full access.
 - **Fixed storage size.** A sandbox's storage cannot grow after creation.

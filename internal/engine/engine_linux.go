@@ -234,12 +234,16 @@ func (e *linuxEngine) Create(ctx context.Context, spec Spec) (*Info, error) {
 	if err := e.Ready(); err != nil {
 		return nil, err
 	}
-	lower, err := e.images.Path(spec.Image)
-	if err != nil {
-		if errors.Is(err, image.ErrNotFound) || errors.Is(err, image.ErrInvalidName) {
-			return nil, ErrImageNotFound
+	var lower string
+	if spec.SnapshotArchive == "" {
+		var err error
+		lower, err = e.images.Path(spec.Image)
+		if err != nil {
+			if errors.Is(err, image.ErrNotFound) || errors.Is(err, image.ErrInvalidName) {
+				return nil, ErrImageNotFound
+			}
+			return nil, err
 		}
-		return nil, err
 	}
 
 	inst := newInstance(spec, filepath.Join(e.sandboxesDir, spec.ID), e.execCfg.MaxConcurrent)
@@ -255,7 +259,19 @@ func (e *linuxEngine) Create(ctx context.Context, spec Spec) (*Info, error) {
 	e.instances[spec.ID] = inst
 	e.mu.Unlock()
 
-	info, err := e.start(ctx, inst, lower)
+	// Startup and teardown must not mutate an instance concurrently.
+	inst.teardownMu.Lock()
+	var info *Info
+	var err error
+	if inst.destroying.Load() {
+		err = ErrSandboxNotFound
+	} else {
+		info, err = e.start(ctx, inst, lower)
+	}
+	if err == nil {
+		inst.started.Store(true)
+	}
+	inst.teardownMu.Unlock()
 	if err != nil {
 		inst.destroying.Store(true)
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.sandboxCfg.DestroyTimeout)
@@ -265,7 +281,6 @@ func (e *linuxEngine) Create(ctx context.Context, spec Spec) (*Info, error) {
 		}
 		return nil, err
 	}
-	inst.started.Store(true)
 	return info, nil
 }
 
@@ -275,6 +290,22 @@ func (e *linuxEngine) Create(ctx context.Context, spec Spec) (*Info, error) {
 func (e *linuxEngine) start(ctx context.Context, inst *instance, lower string) (*Info, error) {
 	if err := os.Mkdir(inst.dir, sandboxDirMode); err != nil {
 		return nil, fmt.Errorf("create sandbox dir: %w", err)
+	}
+	if inst.spec.SnapshotArchive != "" {
+		archive, err := os.Open(inst.spec.SnapshotArchive) // #nosec G304 -- daemon-created temporary file, never a client path.
+		if err != nil {
+			return nil, err
+		}
+		store := image.NewStore(filepath.Join(inst.dir, "restore"), e.sandboxCfg.UIDMapBase, e.sandboxCfg.UIDMapSize)
+		err = store.ImportSnapshot(ctx, "rootfs", archive, inst.spec.SnapshotMaxBytes)
+		_ = archive.Close()
+		if err != nil {
+			return nil, fmt.Errorf("import snapshot: %w", err)
+		}
+		lower, err = store.Path("rootfs")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	_, cgroupFile, err := e.cgroups.Create(inst.id, cgroup.Limits{

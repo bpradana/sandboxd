@@ -19,6 +19,8 @@ package httpapi
 // @tag.description Persistent shell sessions whose state carries across commands.
 // @tag.name files
 // @tag.description File upload, download, listing, and management inside a sandbox.
+// @tag.name snapshots
+// @tag.description Save-and-stop filesystem backups in S3-compatible storage and restore into new sandboxes.
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization

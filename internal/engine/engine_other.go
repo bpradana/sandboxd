@@ -49,6 +49,10 @@ func (u *unsupported) Create(context.Context, Spec) (*Info, error) {
 
 func (u *unsupported) Destroy(context.Context, string) error { return ErrUnsupportedPlatform }
 
+func (u *unsupported) CaptureSnapshot(context.Context, string, io.Writer, int64) error {
+	return ErrUnsupportedPlatform
+}
+
 func (u *unsupported) Stats(context.Context, string) (*Stats, error) {
 	return nil, ErrUnsupportedPlatform
 }
