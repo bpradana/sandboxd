@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
   sandbox, read from its network namespace without running anything in it.
 - A `command` query parameter on the terminal WebSocket, which runs that command
   line on the pseudo-terminal instead of an interactive shell.
+- Five ways to look at a folder in the file explorer, chosen with a segmented
+  control and remembered between visits: icons, list, a tree whose folders open
+  in place and that reports modified time, size and kind, columns one per path
+  level, and a gallery with a large preview beside the folder's other files.
 - A sandbox file explorer with directory browsing, text editing, uploads,
   downloads, file and folder creation, and confirmed deletion.
 - Parallel multipart snapshot uploads with 16 MiB parts, per-part retries and

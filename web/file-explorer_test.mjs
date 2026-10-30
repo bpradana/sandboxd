@@ -10,7 +10,24 @@ const encode = (text) => new TextEncoder().encode(text);
 const html = fs.readFileSync(new URL("./dist/index.html", import.meta.url), "utf8");
 const json = (data, status = 200) => new Response(JSON.stringify({ data }), { status, headers: { "Content-Type": "application/json" } });
 
-function fixture(t) {
+// Node has no Web Storage, and the console stores the chosen view in it.
+function storage(t) {
+  if (globalThis.localStorage) return globalThis.localStorage;
+  const data = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => (data.has(key) ? data.get(key) : null),
+    setItem: (key, value) => data.set(key, String(value)),
+    removeItem: (key) => data.delete(key),
+  };
+  t.after(() => { delete globalThis.localStorage; });
+  return globalThis.localStorage;
+}
+
+function fixture(t, { view } = {}) {
+  const store = storage(t);
+  if (view) store.setItem("sandboxd.files.view", view);
+  else store.removeItem("sandboxd.files.view");
+  t.after(() => store.removeItem("sandboxd.files.view"));
   const { window, document } = parseHTML(html);
   const previous = { window: globalThis.window, fetch: globalThis.fetch };
   globalThis.window = window;
@@ -29,7 +46,7 @@ function fixture(t) {
   const calls = [], confirmations = [];
   let answer = true;
   const explorer = new FileExplorer({ document, toast() {}, confirm(message) { confirmations.push(message); return answer; } });
-  const info = (path, file) => ({ path, name: path.split("/").at(-1), type: file.type, size: file.bytes?.length || 0, mode: file.mode || "0644", link_target: file.link_target });
+  const info = (path, file) => ({ path, name: path.split("/").at(-1), type: file.type, size: file.bytes?.length || 0, mode: file.mode || "0644", modified_at: "2026-10-30T16:00:00Z", link_target: file.link_target });
   const fetch = async (url, options = {}) => {
     const parsed = new URL(url, "http://localhost");
     const path = parsed.searchParams.get("path"), method = options.method || "GET";
@@ -57,7 +74,7 @@ function fixture(t) {
   globalThis.fetch = fetch;
   const select = async (path) => explorer.run((ctx) => explorer.select(info(path, files.get(path)), ctx));
   const edit = (text) => { const area = document.querySelector("#files-editor"); area.value = text; area.oninput(); };
-  return { explorer, document, files, calls, confirmations, fetch, info, select, edit, answer(value) { answer = value; } };
+  return { explorer, document, files, calls, confirmations, fetch, info, select, edit, store, answer(value) { answer = value; } };
 }
 
 test("browse folders, filter filenames safely, create files and folders", async (t) => {
@@ -187,4 +204,76 @@ test("paths, UTF-8 files, BOM and streamed size limits", async () => {
   const response = new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(4)); }, cancel() { canceled = true; } }));
   await assert.rejects(readBytes(response, 3), /limit/);
   assert.equal(canceled, true);
+});
+
+test("every view shows the same folder, highlights the open file, and is remembered", async (t) => {
+  const f = fixture(t);
+  await f.explorer.open({ id: "sandbox-a" });
+  await f.explorer.run((ctx) => f.explorer.list("/project", ctx));
+  const pane = (name) => f.document.querySelector(`#files-pane-${name}`);
+  const pressed = (name) => f.document.querySelector(`#files-view-${name}`).getAttribute("aria-pressed");
+  assert.equal(pane("list").hidden, false);
+  assert.equal(pressed("list"), "true");
+
+  f.explorer.setView("icons");
+  assert.equal(pane("list").hidden, true);
+  assert.equal(pressed("icons"), "true");
+  assert.equal(pane("icons").querySelectorAll(".files-tile").length, 4);
+  // Names are text in every view, never markup.
+  assert.equal(pane("icons").querySelector("img"), null);
+  assert.match(pane("icons").textContent, /<img src=x/);
+  assert.ok([...pane("icons").querySelectorAll(".files-tile-delete")].some((button) => button.getAttribute("aria-label") === "Delete app.py"));
+
+  // Column view reads the ancestors it has not listed yet, and marks the
+  // folder the next pane came from.
+  await f.explorer.setView("columns");
+  const columns = pane("columns").querySelectorAll(".files-column");
+  assert.equal(columns.length, 2);
+  assert.equal(columns[0].querySelector(".files-column-item").getAttribute("aria-current"), "true");
+  assert.equal(columns[1].querySelectorAll(".files-column-item").length, 4);
+
+  f.explorer.setView("gallery");
+  assert.equal(pane("gallery").querySelectorAll(".files-tile").length, 4);
+  assert.match(f.document.querySelector("#files-gallery-preview").textContent, /Select a file/);
+  await f.select("/project/app.py");
+  assert.match(f.document.querySelector("#files-gallery-preview pre").textContent, /print\('hello'\)/);
+  assert.equal(pane("gallery").querySelector(".files-tile-open[aria-current='true']").textContent, "app.py");
+
+  // The filter narrows the folder in view, in whichever view that is.
+  f.document.querySelector("#files-filter").value = "app.py";
+  f.document.querySelector("#files-filter").oninput();
+  assert.equal(pane("gallery").querySelectorAll(".files-tile").length, 1);
+
+  assert.equal(f.store.getItem("sandboxd.files.view"), "gallery");
+  const next = fixture(t, { view: "columns" });
+  assert.equal(next.explorer.view, "columns");
+});
+
+test("the tree opens folders in place and names kind, size and date", async (t) => {
+  const f = fixture(t, { view: "tree" });
+  await f.explorer.open({ id: "sandbox-a" });
+  const rows = () => [...f.document.querySelectorAll("#files-tree-list tr")];
+  const project = () => f.info("/project", f.files.get("/project"));
+  assert.equal(f.explorer.view, "tree");
+  assert.equal(rows().length, 1);
+  assert.equal(rows()[0].querySelectorAll("td")[3].textContent, "Folder");
+  assert.equal(rows()[0].querySelector(".files-tree-toggle").getAttribute("aria-expanded"), "false");
+
+  await f.explorer.run((ctx) => f.explorer.toggle(project(), ctx));
+  assert.equal(rows().length, 5);
+  assert.equal(rows()[0].querySelector(".files-tree-toggle").getAttribute("aria-expanded"), "true");
+  assert.match(rows()[1].querySelector(".files-tree-indent").getAttribute("style"), /14px/);
+  const child = rows().find((row) => row.textContent.includes("app.py")).querySelectorAll("td");
+  assert.match(child[1].textContent, /2026/);
+  assert.equal(child[2].textContent, "15 bytes");
+  assert.equal(child[3].textContent, "File");
+  assert.equal(rows().find((row) => row.textContent.includes("link")).querySelectorAll("td")[3].textContent, "Symlink");
+
+  // Collapsing takes the children away without another request.
+  const reads = f.calls.length;
+  await f.explorer.run((ctx) => f.explorer.toggle(project(), ctx));
+  assert.equal(rows().length, 1);
+  await f.explorer.run((ctx) => f.explorer.toggle(project(), ctx));
+  assert.equal(f.calls.length, reads);
+  assert.equal(rows().length, 5);
 });
