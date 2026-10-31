@@ -94,7 +94,7 @@
           <details class="backup-options">
             <summary>Automatic backups</summary>
             <p class="muted">Connect cloud storage in Settings first.</p>
-            <label>Schedule<select name="backup_interval"><option value="0">Off</option><option value="900">Every 15 minutes</option><option value="3600">Hourly</option><option value="86400">Daily</option></select></label>
+            <div class="schedule-field"><label for="create-backup-interval">Schedule</label><select id="create-backup-interval" name="backup_interval" data-schedule><option value="0">Off</option><option value="900">Every 15 minutes</option><option value="3600">Hourly</option><option value="86400">Daily</option></select></div>
             <label class="checkbox"><input name="backup_before_expiry" type="checkbox">Back up before TTL or idle cleanup</label>
             <label>Keep latest automatic backups<input name="backup_retain" type="number" min="1" max="100" value="5"></label>
           </details>
@@ -188,7 +188,7 @@
       <h2>Automatic backups</h2>
       <p id="backup-policy-sandbox" class="muted"></p>
       <p class="muted">Scheduled backups pause processes during the filesystem copy, then resume before upload. Running sessions stay open.</p>
-      <label>Schedule<select id="backup-policy-interval"><option value="0">Off</option><option value="900">Every 15 minutes</option><option value="3600">Hourly</option><option value="86400">Daily</option></select></label>
+      <div class="schedule-field"><label for="backup-policy-interval">Schedule</label><select id="backup-policy-interval" data-schedule><option value="0">Off</option><option value="900">Every 15 minutes</option><option value="3600">Hourly</option><option value="86400">Daily</option></select></div>
       <label class="checkbox"><input id="backup-policy-expiry" type="checkbox">Back up before TTL or idle cleanup</label>
       <label>Keep latest automatic backups<input id="backup-policy-retain" type="number" min="1" max="100" value="5" required></label>
       <p class="muted">Retention applies to automatic backups from this sandbox. Manual backups are kept.</p>

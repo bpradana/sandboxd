@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { refreshSchedule } from "./schedule-picker.js";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -17,6 +18,7 @@ export function setupWorkspaceTools({ toast, onPolicyChange }) {
       select.add(option);
     }
     select.value = String(interval);
+    refreshSchedule(select);
     $("#backup-policy-expiry").checked = sb.snapshot_policy?.before_expiry || false;
     $("#backup-policy-retain").value = sb.snapshot_policy?.retain || 5;
     $("#backup-policy-status").textContent = sb.last_snapshot_error || "";

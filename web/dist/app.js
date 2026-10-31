@@ -11,6 +11,7 @@ import { setupCloudStorage } from "./cloud-storage.js";
 import { setupWorkspaceTools } from "./workspace-tools.js";
 import { FileExplorer } from "./file-explorer.js";
 import { confirmAction, promptValue } from "./dialogs.js";
+import { setupSchedulePickers } from "./schedule-picker.js";
 import { ConsoleUI, describeImage, sandboxMeta, icon } from "./console-ui.js";
 
 const POLL_INTERVAL_MS = 3000;
@@ -764,6 +765,7 @@ const fileExplorer = new FileExplorer({ toast });
 const consoleUI = new ConsoleUI({ onFiles: (sb) => fileExplorer.open(sb), onRun: openRun, onTerminal: openTerminal });
 
 function start() {
+  setupSchedulePickers();
   setupSettings();
   $("#create-form").addEventListener("submit", createSandbox);
   refreshEngineStatus();

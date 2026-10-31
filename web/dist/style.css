@@ -635,3 +635,20 @@ dialog p { line-height: 1.7; font-size: 12px; }
 .decision-dialog .dialog-actions { margin-top: 24px; }
 .decision-dialog[data-danger="true"] .decision-submit { background: var(--danger); border-color: var(--danger); color: var(--bg); }
 .decision-dialog[data-danger="true"] .decision-submit:hover { background: color-mix(in srgb, var(--danger) 90%, var(--text)); }
+
+/* Backup schedules use a small in-page menu rather than an OS-sized popup.
+   It expands within the form so it cannot cover or clip the fields below. */
+.schedule-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.backup-options .schedule-field label { margin: 0; }
+.schedule-picker { min-width: 0; }
+.schedule-trigger { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 9px 13px 9px 11px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.schedule-trigger::after { content: ""; width: 6px; height: 6px; flex: none; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: translateY(-2px) rotate(45deg); }
+.schedule-trigger[aria-expanded="true"] { border-color: var(--accent); }
+.schedule-trigger[aria-expanded="true"]::after { transform: translateY(2px) rotate(225deg); }
+.schedule-trigger:disabled { opacity: .5; cursor: default; }
+.schedule-menu { list-style: none; margin: 6px 0 0; padding: 4px; max-height: 180px; overflow: auto; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px #00000012; }
+.schedule-menu [role="option"] { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; padding: 6px 9px; border-radius: 5px; color: var(--text); font-size: 12px; line-height: 1.5; cursor: pointer; }
+.schedule-menu [role="option"].active, .schedule-menu [role="option"]:hover { background: var(--accent-soft); }
+.schedule-menu [aria-selected="true"] { color: var(--accent); }
+.schedule-menu [aria-selected="true"]::after { content: "✓"; font-size: 12px; }
+.schedule-menu [aria-disabled="true"] { opacity: .5; cursor: default; }
