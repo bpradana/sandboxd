@@ -139,7 +139,7 @@ func TestWebUIKeepsSettingsAssetsInOneVersion(t *testing.T) {
 	if !strings.Contains(string(body), `href="assets/`+match[1]+`/style.css"`) {
 		t.Fatal("HTML and CSS have different asset versions")
 	}
-	for _, name := range []string{"app.js", "cloud-storage.js", "workspace-tools.js", "api.js", "terminal.js", "style.css"} {
+	for _, name := range []string{"app.js", "cloud-storage.js", "workspace-tools.js", "api.js", "terminal.js", "run.js", "dom.js", "job-progress.js", "file-utils.js", "style.css"} {
 		res, err := app.Test(httptest.NewRequest(http.MethodGet, prefix+name, nil))
 		if err != nil {
 			t.Fatal(err)

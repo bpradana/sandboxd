@@ -66,6 +66,19 @@ func (m Manifest) EffectiveStatus(now time.Time) string {
 	return m.Status
 }
 
+// ImageRef makes a promoted base image usable on more than the one host that
+// promoted it. The image is not stored again: the reference names the
+// snapshot its files came from, which is already uploaded and verified, so a
+// host that has never seen the image can build it from the same archive a
+// restore would use.
+type ImageRef struct {
+	Name         string    `json:"name"`
+	SnapshotID   string    `json:"snapshot_id"`
+	Architecture string    `json:"architecture"`
+	CreatedAt    time.Time `json:"created_at"`
+	SizeBytes    int64     `json:"size_bytes"`
+}
+
 type Store interface {
 	PutManifest(context.Context, Manifest) error
 	GetManifest(context.Context, string) (Manifest, error)
@@ -73,6 +86,12 @@ type Store interface {
 	Upload(context.Context, string, io.ReadSeeker, int64, string) error
 	Download(context.Context, Manifest, io.Writer) error
 	Delete(context.Context, string) error
+
+	// PutImageRef records a promoted image so other hosts can find it.
+	PutImageRef(context.Context, ImageRef) error
+	GetImageRef(context.Context, string) (ImageRef, error)
+	ListImageRefs(context.Context) ([]ImageRef, error)
+	DeleteImageRef(context.Context, string) error
 }
 
 // Verifier can validate a stored archive against its local source without

@@ -32,6 +32,10 @@ func mapError(err error) error {
 		mapped = appctx.ErrSandboxNotFound()
 	case errors.Is(err, engine.ErrImageNotFound):
 		mapped = appctx.ErrImageNotFound()
+	case errors.Is(err, engine.ErrImageExists):
+		mapped = appctx.ErrPathConflict("image already exists")
+	case errors.Is(err, engine.ErrInvalidImageName):
+		mapped = appctx.ErrLimitExceeded("image name must match [a-z0-9][a-z0-9._-]{0,63}")
 	case errors.Is(err, engine.ErrSessionNotFound):
 		mapped = appctx.ErrSessionNotFound()
 	case errors.Is(err, engine.ErrSessionBusy):

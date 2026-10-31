@@ -38,11 +38,21 @@ func (u *unsupported) Stop(context.Context) error {
 
 func (u *unsupported) Ready() error { return ErrUnsupportedPlatform }
 
+func (u *unsupported) HostCapacity() (*HostCapacity, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
 func (u *unsupported) Exits() <-chan Exit { return u.exits }
 
 func (u *unsupported) Images(context.Context) ([]Image, error) {
 	return nil, ErrUnsupportedPlatform
 }
+
+func (u *unsupported) ImportImage(context.Context, string, io.Reader, int64) (*Image, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
+func (u *unsupported) RemoveImage(context.Context, string) error { return ErrUnsupportedPlatform }
 
 func (u *unsupported) Create(context.Context, Spec) (*Info, error) {
 	return nil, ErrUnsupportedPlatform
@@ -59,6 +69,14 @@ func (u *unsupported) CaptureCheckpoint(context.Context, string, io.Writer, int6
 }
 
 func (u *unsupported) DialSandbox(context.Context, string, int) (net.Conn, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
+func (u *unsupported) ListeningPorts(context.Context, string) ([]ListeningPort, error) {
+	return nil, ErrUnsupportedPlatform
+}
+
+func (u *unsupported) Changes(context.Context, string) (*ChangeSet, error) {
 	return nil, ErrUnsupportedPlatform
 }
 

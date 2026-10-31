@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1520" height="1010" viewBox="0 0 1520 1010"><title>sandboxd console redesign — concept with sample data</title><rect width="100%" height="100%" fill="#0c0f10"/>
+<text x="34" y="43" font-family="Helvetica Neue, Arial, sans-serif" font-size="23" fill="#e5e9e7">sandboxd / workspace</text>
+<text x="34" y="63" font-family="Helvetica Neue, Arial, sans-serif" font-size="12" fill="#99a5a3">Console design concept · Sample data</text>
+<text x="1263" y="49" font-family="Menlo, monospace" font-size="11" fill="#99a5a3">01  /  DARK DESKTOP</text>
+<rect x="32" y="90" width="1456" height="868" rx="12" fill="#101314" stroke="#2c3335"/>
+<rect x="33" y="91" width="1454" height="67" rx="11" fill="#171b1d"/>
+<polyline points="32,158 1488,158" fill="none" stroke="#2c3335" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="55" y="106" width="34" height="36" rx="9" fill="#23342b"/>
+<polyline points="72.0,115 81,119.5 81,128.5 72.0,133 63,128.5 63,119.5 72.0,115" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="63,119.5 72.0,124.0 81,119.5" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="72.0,124.0 72.0,133" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="100" y="122" font-family="Helvetica Neue, Arial, sans-serif" font-size="18" fill="#e5e9e7">sandboxd</text>
+<text x="100" y="137" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">Workspace</text>
+<text x="370" y="127" font-family="Helvetica Neue, Arial, sans-serif" font-size="12" fill="#99a5a3">Console</text>
+<text x="438" y="129" font-family="Helvetica Neue, Arial, sans-serif" font-size="14" fill="#99a5a3">›</text>
+<text x="461" y="127" font-family="Helvetica Neue, Arial, sans-serif" font-size="12" fill="#e5e9e7">Workspace</text>
+<rect x="548" y="114" width="58" height="20" rx="4" fill="#202527" stroke="#2c3335"/>
+<text x="557" y="127" font-family="Menlo, monospace" font-size="9" fill="#99a5a3">CONSOLE</text>
+<circle cx="1202" cy="124" r="3" fill="#b3ebbc"/>
+<text x="1214" y="127" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#99a5a3">Engine online</text>
+<circle cx="1342" cy="124" r="4" fill="#99a5a3"/>
+<polyline points="1342.0,117.52 1342,115" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="1342.0,130.48 1342,133" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="1335.52,124.0 1333,124" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="1348.48,124.0 1351,124" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="1337.68,119.68 1336,118" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="1346.32,128.32 1348,130" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="1337.68,128.32 1336,130" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="1346.32,119.68 1348,118" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="1372" y="108" width="93" height="31" rx="6" fill="#202527" stroke="#2c3335"/>
+<text x="1384" y="126" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Settings</text>
+<rect x="33" y="159" width="310" height="798" rx="0" fill="#171b1d"/>
+<polyline points="344,158 344,958" fill="none" stroke="#2c3335" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="53" y="194" font-family="Menlo, monospace" font-size="9" fill="#99a5a3">YOUR ENVIRONMENTS</text>
+<text x="52" y="227" font-family="Helvetica Neue, Arial, sans-serif" font-size="24" fill="#e5e9e7">Workspace</text>
+<rect x="291" y="198" width="33" height="31" rx="6" fill="#b3ebbc"/>
+<text x="303" y="216" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#172e1f">+</text>
+<rect x="49" y="254" width="132" height="34" rx="7" fill="#202527" stroke="#2c3335"/>
+<polyline points="67.0,264 74,267.5 74,274.5 67.0,278 60,274.5 60,267.5 67.0,264" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="60,267.5 67.0,271.0 74,267.5" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="67.0,271.0 67.0,278" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="82" y="274" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Sandboxes</text>
+<text x="163" y="274" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">2</text>
+<polyline points="203,276 198,273 198,268 202,265 205,265 208,260 213,260 217,264 217,266 221,268 222,272 219,276 214,276" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="224" y="274" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#99a5a3">Snapshots</text>
+<text x="313" y="274" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">8</text>
+<rect x="49" y="305" width="278" height="34" rx="7" fill="#101314" stroke="#2c3335"/>
+<circle cx="66.5" cy="319.5" r="4.5" fill="none" stroke="#99a5a3"/>
+<polyline points="70,323 74,327" fill="none" stroke="#99a5a3" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="82" y="326" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#99a5a3">Find a sandbox…</text>
+<rect x="302" y="313" width="15" height="18" rx="3" fill="#101314" stroke="#2c3335"/>
+<text x="306" y="326" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">/</text>
+<text x="51" y="372" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">ENVIRONMENTS</text>
+<text x="272" y="372" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">2 running</text>
+<rect x="49" y="390" width="278" height="225" rx="9" fill="#171b1d" stroke="#b3ebbc"/>
+<rect x="63" y="405" width="31" height="33" rx="7" fill="#23342b"/>
+<polyline points="78.5,412 87,416.25 87,424.75 78.5,429 70,424.75 70,416.25 78.5,412" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="70,416.25 78.5,420.5 87,416.25" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="78.5,420.5 78.5,429" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="104" y="415" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">agent-workspace</text>
+<text x="104" y="433" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">debian</text>
+<rect x="267" y="405" width="47" height="18" rx="4" fill="#23342b"/>
+<text x="274" y="417" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#b3ebbc">running</text>
+<text x="63" y="462" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">Internet access · 10.88.0.2</text>
+<text x="63" y="479" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">58m left · 5 processes</text>
+<text x="63" y="507" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#99a5a3">CPU</text>
+<text x="63" y="525" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">2%</text>
+<rect x="63" y="536" width="70" height="3" rx="1" fill="#2c3335"/>
+<rect x="63" y="536" width="3" height="3" rx="1" fill="#b3ebbc"/>
+<text x="148" y="507" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#99a5a3">MEMORY</text>
+<text x="148" y="525" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">24 MB</text>
+<rect x="148" y="536" width="70" height="3" rx="1" fill="#2c3335"/>
+<rect x="148" y="536" width="12" height="3" rx="1" fill="#b3ebbc"/>
+<text x="233" y="507" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#99a5a3">DISK</text>
+<text x="233" y="525" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">12 MB</text>
+<rect x="233" y="536" width="70" height="3" rx="1" fill="#2c3335"/>
+<rect x="233" y="536" width="8" height="3" rx="1" fill="#b3ebbc"/>
+<rect x="63" y="553" width="90" height="29" rx="5" fill="#23342b" stroke="#2c3335"/>
+<text x="75" y="571" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#b3ebbc">&gt;_ Terminal</text>
+<text x="174" y="572" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Files</text>
+<text x="269" y="572" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Run</text>
+<polyline points="63,594 313,594" fill="none" stroke="#2c3335" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="63" y="612" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">Manage environment</text>
+<text x="296" y="613" font-family="Helvetica Neue, Arial, sans-serif" font-size="15" fill="#99a5a3">···</text>
+<rect x="49" y="630" width="278" height="225" rx="9" fill="#171b1d" stroke="#2c3335"/>
+<rect x="63" y="645" width="31" height="33" rx="7" fill="#23342b"/>
+<polyline points="78.5,652 87,656.25 87,664.75 78.5,669 70,664.75 70,656.25 78.5,652" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="70,656.25 78.5,660.5 87,656.25" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="78.5,660.5 78.5,669" fill="none" stroke="#b3ebbc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="104" y="655" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">web-playground</text>
+<text x="104" y="673" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">alpine</text>
+<rect x="267" y="645" width="47" height="18" rx="4" fill="#23342b"/>
+<text x="274" y="657" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#b3ebbc">running</text>
+<text x="63" y="702" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">Isolated network</text>
+<text x="63" y="719" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">58m left · 5 processes</text>
+<text x="63" y="747" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#99a5a3">CPU</text>
+<text x="63" y="765" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">2%</text>
+<rect x="63" y="776" width="70" height="3" rx="1" fill="#2c3335"/>
+<rect x="63" y="776" width="3" height="3" rx="1" fill="#b3ebbc"/>
+<text x="148" y="747" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#99a5a3">MEMORY</text>
+<text x="148" y="765" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">24 MB</text>
+<rect x="148" y="776" width="70" height="3" rx="1" fill="#2c3335"/>
+<rect x="148" y="776" width="12" height="3" rx="1" fill="#b3ebbc"/>
+<text x="233" y="747" font-family="Helvetica Neue, Arial, sans-serif" font-size="9" fill="#99a5a3">DISK</text>
+<text x="233" y="765" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">12 MB</text>
+<rect x="233" y="776" width="70" height="3" rx="1" fill="#2c3335"/>
+<rect x="233" y="776" width="8" height="3" rx="1" fill="#b3ebbc"/>
+<rect x="63" y="793" width="90" height="29" rx="5" fill="#23342b" stroke="#2c3335"/>
+<text x="75" y="811" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#b3ebbc">&gt;_ Terminal</text>
+<text x="174" y="812" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Files</text>
+<text x="269" y="812" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Run</text>
+<polyline points="63,834 313,834" fill="none" stroke="#2c3335" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="63" y="852" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">Manage environment</text>
+<text x="296" y="853" font-family="Helvetica Neue, Arial, sans-serif" font-size="15" fill="#99a5a3">···</text>
+<polyline points="33,919 344,919" fill="none" stroke="#2c3335" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="52" cy="938" r="2" fill="#b3ebbc"/>
+<text x="62" y="941" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">Isolated environments</text>
+<text x="265" y="940" font-family="Menlo, monospace" font-size="9" fill="#99a5a3">sandboxd</text>
+<text x="370" y="196" font-family="Menlo, monospace" font-size="9" fill="#99a5a3">INTERACTIVE TERMINAL</text>
+<text x="370" y="224" font-family="Helvetica Neue, Arial, sans-serif" font-size="19" fill="#e5e9e7">agent-workspace · shell #1</text>
+<rect x="1263" y="207" width="55" height="22" rx="4" fill="#101314" stroke="#2c3335"/>
+<text x="1273" y="222" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">debian</text>
+<rect x="1330" y="200" width="63" height="31" rx="6" fill="#202527" stroke="#2c3335"/>
+<text x="1342" y="218" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Files</text>
+<rect x="1402" y="200" width="59" height="31" rx="6" fill="#202527" stroke="#2c3335"/>
+<text x="1414" y="218" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#e5e9e7">Run</text>
+<rect x="370" y="257" width="1092" height="662" rx="10" fill="#101415" stroke="#2c3335"/>
+<rect x="371" y="258" width="1090" height="43" rx="10" fill="#171b1d"/>
+<rect x="371" y="258" width="262" height="43" rx="0" fill="#202527"/>
+<rect x="371" y="258" width="262" height="2" rx="0" fill="#b3ebbc"/>
+<circle cx="387" cy="280" r="2" fill="#b3ebbc"/>
+<text x="402" y="284" font-family="Menlo, monospace" font-size="11" fill="#e5e9e7">agent-workspace #1</text>
+<text x="613" y="285" font-family="Helvetica Neue, Arial, sans-serif" font-size="16" fill="#99a5a3">×</text>
+<polyline points="633,258 633,300" fill="none" stroke="#2c3335" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="652" y="283" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">▷  run web-playground #1</text>
+<text x="911" y="285" font-family="Helvetica Neue, Arial, sans-serif" font-size="16" fill="#99a5a3">×</text>
+<text x="1432" y="287" font-family="Helvetica Neue, Arial, sans-serif" font-size="20" fill="#99a5a3">+</text>
+<polyline points="370,301 1462,301" fill="none" stroke="#2c3335" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="393" y="338" font-family="Menlo, monospace" font-size="13" fill="#b3ebbc">root@sandbox:~# pwd</text>
+<text x="393" y="362" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7">/root</text>
+<text x="393" y="386" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7"></text>
+<text x="393" y="410" font-family="Menlo, monospace" font-size="13" fill="#b3ebbc">root@sandbox:~# mkdir -p /workspace &amp;&amp; cd /workspace</text>
+<text x="393" y="434" font-family="Menlo, monospace" font-size="13" fill="#b3ebbc">root@sandbox:/workspace# python3 --version</text>
+<text x="393" y="458" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7">Python 3.13.5</text>
+<text x="393" y="482" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7"></text>
+<text x="393" y="506" font-family="Menlo, monospace" font-size="13" fill="#b3ebbc">root@sandbox:/workspace# ls -la</text>
+<text x="393" y="530" font-family="Menlo, monospace" font-size="13" fill="#99a5a3">drwxr-xr-x  2 root root  4096 Oct 31 10:42 .</text>
+<text x="393" y="554" font-family="Menlo, monospace" font-size="13" fill="#99a5a3">drwxr-xr-x  1 root root  4096 Oct 31 10:40 ..</text>
+<text x="393" y="578" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7">-rw-r--r--  1 root root   124 Oct 31 10:42 README.md</text>
+<text x="393" y="602" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7">-rwxr-xr-x  1 root root    67 Oct 31 10:42 hello.py</text>
+<text x="393" y="626" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7"></text>
+<text x="393" y="650" font-family="Menlo, monospace" font-size="13" fill="#b3ebbc">root@sandbox:/workspace# python3 hello.py</text>
+<text x="393" y="674" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7">Hello from your sandbox.</text>
+<text x="393" y="698" font-family="Menlo, monospace" font-size="13" fill="#e5e9e7"></text>
+<text x="393" y="722" font-family="Menlo, monospace" font-size="13" fill="#b3ebbc">root@sandbox:/workspace# </text>
+<rect x="593.0" y="712" width="8" height="17" rx="0" fill="#b3ebbc"/>
+<circle cx="374" cy="939" r="2" fill="#b3ebbc"/>
+<text x="385" y="942" font-family="Helvetica Neue, Arial, sans-serif" font-size="10" fill="#99a5a3">2 running sandboxes</text>
+<text x="1243" y="942" font-family="Menlo, monospace" font-size="10" fill="#99a5a3">N  New sandbox    /  Search</text>
+<text x="34" y="992" font-family="Helvetica Neue, Arial, sans-serif" font-size="11" fill="#99a5a3">Editable SVG · Graphite surfaces / sage accents / terminal-first workspace</text>
+</svg>

@@ -245,7 +245,7 @@ func (e *linuxEngine) Terminal(ctx context.Context, id string, req TerminalReque
 			env[key] = value
 		}
 		request = &agent.Frame{Type: agent.TypeTTYOpen, TTY: &agent.TTYSpec{
-			ID: req.ID, Argv: req.Argv, UID: user.uid, GID: user.gid, Env: composeEnv(user, env), Cwd: cwd, Cols: req.Cols, Rows: req.Rows,
+			ID: req.ID, Argv: req.Argv, Command: req.Command, UID: user.uid, GID: user.gid, Env: composeEnv(user, env), Cwd: cwd, Cols: req.Cols, Rows: req.Rows,
 		}}
 	}
 	if err := conn.Write(request); err != nil {

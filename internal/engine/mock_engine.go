@@ -71,6 +71,21 @@ func (mr *MockEngineMockRecorder) CaptureSnapshot(ctx, id, dst, maxBytes any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CaptureSnapshot", reflect.TypeOf((*MockEngine)(nil).CaptureSnapshot), ctx, id, dst, maxBytes)
 }
 
+// Changes mocks base method.
+func (m *MockEngine) Changes(ctx context.Context, id string) (*ChangeSet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Changes", ctx, id)
+	ret0, _ := ret[0].(*ChangeSet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Changes indicates an expected call of Changes.
+func (mr *MockEngineMockRecorder) Changes(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changes", reflect.TypeOf((*MockEngine)(nil).Changes), ctx, id)
+}
+
 // CloseSession mocks base method.
 func (m *MockEngine) CloseSession(ctx context.Context, id, sessionID string) error {
 	m.ctrl.T.Helper()
@@ -158,6 +173,21 @@ func (mr *MockEngineMockRecorder) Exits() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Exits", reflect.TypeOf((*MockEngine)(nil).Exits))
 }
 
+// HostCapacity mocks base method.
+func (m *MockEngine) HostCapacity() (*HostCapacity, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HostCapacity")
+	ret0, _ := ret[0].(*HostCapacity)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HostCapacity indicates an expected call of HostCapacity.
+func (mr *MockEngineMockRecorder) HostCapacity() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HostCapacity", reflect.TypeOf((*MockEngine)(nil).HostCapacity))
+}
+
 // Images mocks base method.
 func (m *MockEngine) Images(ctx context.Context) ([]Image, error) {
 	m.ctrl.T.Helper()
@@ -173,6 +203,21 @@ func (mr *MockEngineMockRecorder) Images(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Images", reflect.TypeOf((*MockEngine)(nil).Images), ctx)
 }
 
+// ImportImage mocks base method.
+func (m *MockEngine) ImportImage(ctx context.Context, name string, src io.Reader, maxBytes int64) (*Image, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImportImage", ctx, name, src, maxBytes)
+	ret0, _ := ret[0].(*Image)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportImage indicates an expected call of ImportImage.
+func (mr *MockEngineMockRecorder) ImportImage(ctx, name, src, maxBytes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportImage", reflect.TypeOf((*MockEngine)(nil).ImportImage), ctx, name, src, maxBytes)
+}
+
 // ListDir mocks base method.
 func (m *MockEngine) ListDir(ctx context.Context, id, path string) ([]FileInfo, error) {
 	m.ctrl.T.Helper()
@@ -186,6 +231,21 @@ func (m *MockEngine) ListDir(ctx context.Context, id, path string) ([]FileInfo, 
 func (mr *MockEngineMockRecorder) ListDir(ctx, id, path any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDir", reflect.TypeOf((*MockEngine)(nil).ListDir), ctx, id, path)
+}
+
+// ListeningPorts mocks base method.
+func (m *MockEngine) ListeningPorts(ctx context.Context, id string) ([]ListeningPort, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListeningPorts", ctx, id)
+	ret0, _ := ret[0].([]ListeningPort)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListeningPorts indicates an expected call of ListeningPorts.
+func (mr *MockEngineMockRecorder) ListeningPorts(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListeningPorts", reflect.TypeOf((*MockEngine)(nil).ListeningPorts), ctx, id)
 }
 
 // Mkdir mocks base method.
@@ -259,6 +319,20 @@ func (m *MockEngine) Remove(ctx context.Context, id, path string, recursive bool
 func (mr *MockEngineMockRecorder) Remove(ctx, id, path, recursive any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockEngine)(nil).Remove), ctx, id, path, recursive)
+}
+
+// RemoveImage mocks base method.
+func (m *MockEngine) RemoveImage(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveImage", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveImage indicates an expected call of RemoveImage.
+func (mr *MockEngineMockRecorder) RemoveImage(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveImage", reflect.TypeOf((*MockEngine)(nil).RemoveImage), ctx, name)
 }
 
 // SessionExec mocks base method.

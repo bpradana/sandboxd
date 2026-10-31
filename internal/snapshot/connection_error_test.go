@@ -70,3 +70,27 @@ func TestConnectionTestMessageOperationsAndTransport(t *testing.T) {
 		})
 	}
 }
+
+// Transfer acceleration is an AWS S3 service reached at its own host, so the
+// settings that point somewhere else, or address a bucket by path, cannot
+// come with it.
+func TestAccelerationRefusesSettingsItCannotHonour(t *testing.T) {
+	base := Connection{AuthMode: AuthServerIdentity, Bucket: "backups", Region: "ap-southeast-2", Accelerate: true}
+	if err := base.Validate(); err != nil {
+		t.Fatalf("a plain accelerated connection was rejected: %v", err)
+	}
+	for name, broken := range map[string]Connection{
+		"custom endpoint": {AuthMode: AuthServerIdentity, Bucket: "backups", Region: "ap-southeast-2", Accelerate: true, Endpoint: "https://minio.example"},
+		"path style":      {AuthMode: AuthServerIdentity, Bucket: "backups", Region: "ap-southeast-2", Accelerate: true, PathStyle: true},
+		"dotted bucket":   {AuthMode: AuthServerIdentity, Bucket: "my.backups", Region: "ap-southeast-2", Accelerate: true},
+	} {
+		if err := broken.Validate(); !errors.Is(err, ErrConnectionInvalid) {
+			t.Errorf("%s was accepted alongside acceleration: %v", name, err)
+		}
+	}
+	// The same settings are fine when acceleration is off.
+	off := Connection{AuthMode: AuthServerIdentity, Bucket: "my.backups", Region: "us-east-1", Endpoint: "https://minio.example", PathStyle: true}
+	if err := off.Validate(); err != nil {
+		t.Fatalf("acceleration rules leaked into an ordinary connection: %v", err)
+	}
+}

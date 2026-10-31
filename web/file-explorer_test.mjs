@@ -10,7 +10,24 @@ const encode = (text) => new TextEncoder().encode(text);
 const html = fs.readFileSync(new URL("./dist/index.html", import.meta.url), "utf8");
 const json = (data, status = 200) => new Response(JSON.stringify({ data }), { status, headers: { "Content-Type": "application/json" } });
 
-function fixture(t) {
+// Node has no Web Storage, and the console stores the chosen view in it.
+function storage(t) {
+  if (globalThis.localStorage) return globalThis.localStorage;
+  const data = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => (data.has(key) ? data.get(key) : null),
+    setItem: (key, value) => data.set(key, String(value)),
+    removeItem: (key) => data.delete(key),
+  };
+  t.after(() => { delete globalThis.localStorage; });
+  return globalThis.localStorage;
+}
+
+function fixture(t, { view } = {}) {
+  const store = storage(t);
+  if (view) store.setItem("sandboxd.files.view", view);
+  else store.removeItem("sandboxd.files.view");
+  t.after(() => store.removeItem("sandboxd.files.view"));
   const { window, document } = parseHTML(html);
   const previous = { window: globalThis.window, fetch: globalThis.fetch };
   globalThis.window = window;
@@ -29,13 +46,24 @@ function fixture(t) {
   const calls = [], confirmations = [];
   let answer = true;
   const explorer = new FileExplorer({ document, toast() {}, confirm(message) { confirmations.push(message); return answer; } });
-  const info = (path, file) => ({ path, name: path.split("/").at(-1), type: file.type, size: file.bytes?.length || 0, mode: file.mode || "0644", link_target: file.link_target });
+  const info = (path, file) => ({ path, name: path.split("/").at(-1), type: file.type, size: file.bytes?.length || 0, mode: file.mode || "0644", modified_at: "2026-10-30T16:00:00Z", link_target: file.link_target });
   const fetch = async (url, options = {}) => {
     const parsed = new URL(url, "http://localhost");
     const path = parsed.searchParams.get("path"), method = options.method || "GET";
     calls.push({ url, method, options, path });
     if (method === "POST" && parsed.pathname.endsWith("/mkdir")) {
       const body = JSON.parse(options.body); files.set(body.path, { type: "dir" }); return json({});
+    }
+    if (parsed.pathname.endsWith("/changes")) {
+      return json({
+        entries: [
+          { path: "/etc/resolv.conf", kind: "modified", type: "file", size: 20, mode: "0644", modified_at: "2026-10-30T16:00:00Z", seeded: true },
+          { path: "/project/app.py", kind: "modified", type: "file", size: 15, mode: "0755", modified_at: "2026-10-30T16:00:00Z", seeded: false },
+          { path: "/project/out", kind: "added", type: "dir", size: 0, mode: "0755", modified_at: "2026-10-30T16:00:00Z", seeded: false },
+          { path: "/project/gone.txt", kind: "deleted", size: 0, seeded: false },
+        ],
+        truncated: false,
+      });
     }
     const file = files.get(path);
     if (method === "PUT") {
@@ -57,7 +85,7 @@ function fixture(t) {
   globalThis.fetch = fetch;
   const select = async (path) => explorer.run((ctx) => explorer.select(info(path, files.get(path)), ctx));
   const edit = (text) => { const area = document.querySelector("#files-editor"); area.value = text; area.oninput(); };
-  return { explorer, document, files, calls, confirmations, fetch, info, select, edit, answer(value) { answer = value; } };
+  return { explorer, document, files, calls, confirmations, fetch, info, select, edit, store, answer(value) { answer = value; } };
 }
 
 test("browse folders, filter filenames safely, create files and folders", async (t) => {
@@ -99,7 +127,7 @@ test("edit preserves permissions, catches agent changes, and protects unsaved wo
   assert.equal(new TextDecoder().decode(f.files.get("/project/app.py").bytes), "agent changes\n");
   assert.equal(f.explorer.dirty, true);
   assert.ok(f.confirmations.some((message) => message.includes("changed in the sandbox")));
-  f.explorer.close();
+  await f.explorer.close();
   assert.equal(f.document.querySelector("#files-dialog").open, true);
 });
 
@@ -175,6 +203,24 @@ test("sandbox stop disables operations and authenticated downloads keep keys out
   assert.match(f.document.querySelector("#files-status").textContent, /stopped/);
 });
 
+test("stopping the sandbox during an overwrite decision never writes stale edits", async (t) => {
+  const f = fixture(t);
+  await f.explorer.open({ id: "sandbox-a" });
+  await f.select("/project/app.py");
+  f.edit("my edits\n");
+  f.files.get("/project/app.py").bytes = encode("agent edits\n");
+  let resolve, requested;
+  const waiting = new Promise((done) => { requested = done; });
+  f.explorer.confirm = () => { requested(); return new Promise((done) => { resolve = done; }); };
+  const saving = f.explorer.run((ctx) => f.explorer.save(ctx));
+  await waiting;
+  f.explorer.update([]);
+  resolve(true);
+  await saving;
+  assert.equal(f.calls.filter((call) => call.method === "PUT").length, 0);
+  assert.equal(new TextDecoder().decode(f.files.get("/project/app.py").bytes), "agent edits\n");
+});
+
 test("paths, UTF-8 files, BOM and streamed size limits", async () => {
   assert.equal(cleanPath("/a/../../b//./"), "/b");
   assert.equal(childPath("/project", "a & b.txt"), "/project/a & b.txt");
@@ -187,4 +233,116 @@ test("paths, UTF-8 files, BOM and streamed size limits", async () => {
   const response = new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(4)); }, cancel() { canceled = true; } }));
   await assert.rejects(readBytes(response, 3), /limit/);
   assert.equal(canceled, true);
+});
+
+test("every view shows the same folder, highlights the open file, and is remembered", async (t) => {
+  const f = fixture(t);
+  await f.explorer.open({ id: "sandbox-a" });
+  await f.explorer.run((ctx) => f.explorer.list("/project", ctx));
+  const pane = (name) => f.document.querySelector(`#files-pane-${name}`);
+  const pressed = (name) => f.document.querySelector(`#files-view-${name}`).getAttribute("aria-pressed");
+  assert.equal(pane("list").hidden, false);
+  assert.equal(pressed("list"), "true");
+
+  f.explorer.setView("icons");
+  assert.equal(pane("list").hidden, true);
+  assert.equal(pressed("icons"), "true");
+  assert.equal(pane("icons").querySelectorAll(".files-tile").length, 4);
+  // Names are text in every view, never markup.
+  assert.equal(pane("icons").querySelector("img"), null);
+  assert.match(pane("icons").textContent, /<img src=x/);
+  assert.ok([...pane("icons").querySelectorAll(".files-tile-delete")].some((button) => button.getAttribute("aria-label") === "Delete app.py"));
+
+  // Column view reads the ancestors it has not listed yet, and marks the
+  // folder the next pane came from.
+  await f.explorer.setView("columns");
+  const columns = pane("columns").querySelectorAll(".files-column");
+  assert.equal(columns.length, 2);
+  assert.equal(columns[0].querySelector(".files-column-item").getAttribute("aria-current"), "true");
+  assert.equal(columns[1].querySelectorAll(".files-column-item").length, 4);
+
+  f.explorer.setView("gallery");
+  assert.equal(pane("gallery").querySelectorAll(".files-tile").length, 4);
+  assert.match(f.document.querySelector("#files-gallery-preview").textContent, /Select a file/);
+  await f.select("/project/app.py");
+  assert.match(f.document.querySelector("#files-gallery-preview pre").textContent, /print\('hello'\)/);
+  assert.equal(pane("gallery").querySelector(".files-tile-open[aria-current='true']").textContent, "app.py");
+
+  // The filter narrows the folder in view, in whichever view that is.
+  f.document.querySelector("#files-filter").value = "app.py";
+  f.document.querySelector("#files-filter").oninput();
+  assert.equal(pane("gallery").querySelectorAll(".files-tile").length, 1);
+
+  assert.equal(f.store.getItem("sandboxd.files.view"), "gallery");
+  const next = fixture(t, { view: "columns" });
+  assert.equal(next.explorer.view, "columns");
+});
+
+test("the tree opens folders in place and names kind, size and date", async (t) => {
+  const f = fixture(t, { view: "tree" });
+  await f.explorer.open({ id: "sandbox-a" });
+  const rows = () => [...f.document.querySelectorAll("#files-tree-list tr")];
+  const project = () => f.info("/project", f.files.get("/project"));
+  assert.equal(f.explorer.view, "tree");
+  assert.equal(rows().length, 1);
+  assert.equal(rows()[0].querySelectorAll("td")[3].textContent, "Folder");
+  assert.equal(rows()[0].querySelector(".files-tree-toggle").getAttribute("aria-expanded"), "false");
+
+  await f.explorer.run((ctx) => f.explorer.toggle(project(), ctx));
+  assert.equal(rows().length, 5);
+  assert.equal(rows()[0].querySelector(".files-tree-toggle").getAttribute("aria-expanded"), "true");
+  assert.match(rows()[1].querySelector(".files-tree-indent").getAttribute("style"), /14px/);
+  const child = rows().find((row) => row.textContent.includes("app.py")).querySelectorAll("td");
+  assert.match(child[1].textContent, /2026/);
+  assert.equal(child[2].textContent, "15 bytes");
+  assert.equal(child[3].textContent, "File");
+  assert.equal(rows().find((row) => row.textContent.includes("link")).querySelectorAll("td")[3].textContent, "Symlink");
+
+  // Collapsing takes the children away without another request.
+  const reads = f.calls.length;
+  await f.explorer.run((ctx) => f.explorer.toggle(project(), ctx));
+  assert.equal(rows().length, 1);
+  await f.explorer.run((ctx) => f.explorer.toggle(project(), ctx));
+  assert.equal(f.calls.length, reads);
+  assert.equal(rows().length, 5);
+});
+
+test("the change list names what the workload did and hides the daemon's own files", async (t) => {
+  const f = fixture(t);
+  await f.explorer.open({ id: "sandbox-a" });
+  const rows = () => [...f.document.querySelectorAll("#files-changes-list tr")];
+  const note = () => f.document.querySelector("#files-changes-note").textContent;
+
+  await f.explorer.toggleChanges();
+  assert.equal(f.document.querySelector("#files-pane-changes").hidden, false);
+  assert.equal(f.document.querySelector("#files-pane-list").hidden, true);
+  // A folder view makes no sense for a whole-sandbox list.
+  assert.equal(f.document.querySelector(".view-switch").hidden, true);
+  assert.equal(f.document.querySelector("#files-changes").textContent, "Folder");
+
+  assert.equal(rows().length, 3);
+  assert.match(note(), /1 file the daemon writes into every sandbox hidden/);
+  const kinds = rows().map((row) => row.querySelectorAll("td")[1].textContent);
+  assert.ok(kinds.some((kind) => kind.startsWith("modified")) && kinds.some((kind) => kind.startsWith("deleted")));
+  assert.equal(f.document.querySelector("#files-count").textContent, "3 changes");
+
+  // A deleted path has nothing left to open, or to size.
+  const deleted = rows().find((row) => row.textContent.includes("gone.txt"));
+  assert.equal(deleted.querySelector(".files-change-path").disabled, true);
+  assert.equal(deleted.querySelectorAll("td")[2].textContent, "");
+
+  f.document.querySelector("#files-changes-seeded").checked = true;
+  f.document.querySelector("#files-changes-seeded").onchange();
+  assert.equal(rows().length, 4);
+  assert.ok(rows().some((row) => row.textContent.includes("/etc/resolv.conf")));
+
+  // A changed file opens in the editor from here.
+  const edited = rows().find((row) => row.textContent.includes("app.py"));
+  edited.querySelector(".files-change-path").onclick();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.match(f.document.querySelector("#files-editor").value, /hello/);
+
+  await f.explorer.toggleChanges();
+  assert.equal(f.document.querySelector("#files-pane-changes").hidden, true);
+  assert.equal(f.document.querySelector(".view-switch").hidden, false);
 });

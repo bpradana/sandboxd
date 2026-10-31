@@ -62,6 +62,7 @@ func (s *S3Store) uploadMultipart(ctx context.Context, id string, src io.ReaderA
 
 func (s *S3Store) uploadParts(ctx context.Context, key, uploadID string, src io.ReaderAt, size int64) ([]types.CompletedPart, error) {
 	parts := make([]types.CompletedPart, (size+uploadPartSize-1)/uploadPartSize)
+	stored := newTransfer(ctx)
 	group, partCtx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
 	for i := range parts {
@@ -80,6 +81,7 @@ func (s *S3Store) uploadParts(ctx context.Context, key, uploadID string, src io.
 			// Each worker owns its element; completion order does not affect
 			// the ascending part order required by CompleteMultipartUpload.
 			parts[i] = part
+			stored.set(i, length)
 			return nil
 		})
 	}

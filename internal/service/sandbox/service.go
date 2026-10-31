@@ -22,21 +22,34 @@ import (
 
 type Service interface {
 	Ready() error
+	// Capacity reports what this daemon is and what it can still take on.
+	Capacity(ctx context.Context) (*presentation.CapacityResponse, error)
 	ListImages(ctx context.Context) ([]presentation.ImageResponse, error)
+	// RemoveImage deletes a base image here and, if promoted, cluster-wide.
+	RemoveImage(ctx context.Context, name string) error
 
 	Create(ctx context.Context, req presentation.CreateSandboxRequest) (*presentation.SandboxResponse, error)
 	Get(ctx context.Context, id string) (*presentation.SandboxResponse, error)
 	List(ctx context.Context, req presentation.ListSandboxesRequest) ([]presentation.SandboxResponse, error)
 	Stats(ctx context.Context, id string) (*presentation.SandboxStatsResponse, error)
+	// Changes reports what the sandbox's workload did to its filesystem.
+	Changes(ctx context.Context, id string) (*presentation.SandboxChangesResponse, error)
 	Keepalive(ctx context.Context, id string, req presentation.KeepaliveRequest) (*presentation.SandboxResponse, error)
 	Destroy(ctx context.Context, id string) error
 	CreateSnapshot(ctx context.Context, id string, req presentation.CreateSnapshotRequest) (*presentation.SnapshotResponse, error)
 	SetSnapshotPolicy(context.Context, string, model.SnapshotPolicy) (*presentation.SandboxResponse, error)
 	CreatePreview(context.Context, string, presentation.CreatePreviewRequest) (*preview.Session, error)
 	RevokePreview(context.Context, string, presentation.RevokePreviewRequest) error
+	// ListPreviews reports the previews this daemon holds for a sandbox.
+	ListPreviews(ctx context.Context, id string) ([]preview.Session, error)
+	ListeningPorts(ctx context.Context, id string) ([]presentation.ListeningPortResponse, error)
 	GetSnapshot(ctx context.Context, id string) (*presentation.SnapshotResponse, error)
 	ListSnapshots(ctx context.Context) ([]presentation.SnapshotResponse, error)
+	// SnapshotJobs lists running backups and restores from memory alone.
+	SnapshotJobs() []presentation.SnapshotJobResponse
 	DeleteSnapshot(ctx context.Context, id string) error
+	// PromoteSnapshot imports a stored snapshot as a base image.
+	PromoteSnapshot(ctx context.Context, id string, req presentation.PromoteSnapshotRequest) (*presentation.ImageResponse, error)
 	GetCloudStorage(ctx context.Context) (*presentation.CloudStorageResponse, error)
 	TestCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) error
 	SaveCloudStorage(ctx context.Context, req presentation.CloudStorageRequest) (*presentation.CloudStorageResponse, error)
@@ -111,6 +124,9 @@ type service struct {
 
 	tickets *ticketStore
 
+	// jobProgress reports how far running backups and restores have got.
+	jobProgress *progressTracker
+
 	// background owns the reaper and exit-watcher goroutines.
 	background sync.WaitGroup
 	stop       chan struct{}
@@ -162,6 +178,8 @@ func newService(
 		now:      time.Now,
 		inFlight: make(map[string]int),
 		tickets:  newTicketStore(),
+
+		jobProgress: newProgressTracker(),
 	}
 }
 

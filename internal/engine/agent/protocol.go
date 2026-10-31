@@ -99,8 +99,11 @@ type SessionSpec struct {
 type TTYSpec struct {
 	ID   string   `json:"id,omitempty"`
 	Argv []string `json:"argv,omitempty"`
-	UID  int      `json:"uid,omitempty"`
-	GID  int      `json:"gid,omitempty"`
+	// Command, when Argv is empty, runs on the pseudo-terminal through the
+	// image's login shell instead of an interactive one.
+	Command string `json:"command,omitempty"`
+	UID     int    `json:"uid,omitempty"`
+	GID     int    `json:"gid,omitempty"`
 	// Env is the complete environment, KEY=VALUE.
 	Env  []string `json:"env,omitempty"`
 	Cwd  string   `json:"cwd,omitempty"`

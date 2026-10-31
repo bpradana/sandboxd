@@ -165,10 +165,7 @@ func (s *server) detachWindow() time.Duration {
 
 func (s *server) startTerminal(spec *agent.TTYSpec) (*terminal, error) {
 	started := time.Now()
-	argv := spec.Argv
-	if len(argv) == 0 {
-		argv = defaultLoginShell()
-	}
+	argv := terminalArgv(spec)
 	master, peer, err := s.openPTY(spec.Cols, spec.Rows, spec.UID, spec.GID)
 	if err != nil {
 		return nil, err
@@ -319,10 +316,23 @@ func writeInput(master *os.File, data []byte) {
 	_, _ = master.Write(data)
 }
 
-// defaultLoginShell prefers bash when the image has it.
-func defaultLoginShell() []string {
-	if _, err := os.Stat("/bin/bash"); err == nil {
-		return []string{"/bin/bash", "-l"}
+// terminalArgv is the caller's argv, or the login shell: interactive, or
+// running the caller's command and exiting with it.
+func terminalArgv(spec *agent.TTYSpec) []string {
+	switch {
+	case len(spec.Argv) > 0:
+		return spec.Argv
+	case spec.Command != "":
+		return []string{loginShell(), "-lc", spec.Command}
+	default:
+		return []string{loginShell(), "-l"}
 	}
-	return []string{"/bin/sh", "-l"}
+}
+
+// loginShell prefers bash when the image has it.
+func loginShell() string {
+	if _, err := os.Stat("/bin/bash"); err == nil {
+		return "/bin/bash"
+	}
+	return "/bin/sh"
 }

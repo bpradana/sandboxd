@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { confirmAction } from "./dialogs.js";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -43,6 +44,7 @@ export function setupCloudStorage({ toast, onChange }) {
     $("#cloud-endpoint").value = value.endpoint || "";
     $("#cloud-prefix").value = value.prefix ?? "sandboxd/snapshots";
     $("#cloud-path-style").checked = !!value.path_style;
+    $("#cloud-accelerate").checked = !!value.accelerate;
     $("#cloud-connection-status").textContent = value.connected
       ? `Connected to ${value.bucket}${value.source === "environment" ? " using server configuration" : ""}.`
       : "No cloud storage connected.";
@@ -67,6 +69,7 @@ export function setupCloudStorage({ toast, onChange }) {
       endpoint: $("#cloud-endpoint").value.trim(),
       prefix: $("#cloud-prefix").value.trim(),
       path_style: $("#cloud-path-style").checked,
+      accelerate: $("#cloud-accelerate").checked,
     };
     if (body.auth_mode === "access_keys") {
       body.access_key_id = $("#cloud-access-key").value;
@@ -83,15 +86,17 @@ export function setupCloudStorage({ toast, onChange }) {
 
   $("#cloud-storage-open").addEventListener("click", () => {
     $("#settings-form").hidden = true;
+    $("#images-settings").hidden = true;
     $("#cloud-storage-settings").hidden = false;
     $("#settings-api-open").setAttribute("aria-pressed", "false");
+    $("#images-open").setAttribute("aria-pressed", "false");
     $("#cloud-storage-open").setAttribute("aria-pressed", "true");
     load();
   });
   $("#cloud-auth-mode").addEventListener("change", () => { clearCredentials(); updateAuthentication(); });
   dialog.addEventListener("close", clearCredentials);
   window.addEventListener("pagehide", clearCredentials);
-  $("#settings-api-open").addEventListener("click", clearCredentials);
+  for (const id of ["#settings-api-open", "#images-open"]) $(id).addEventListener("click", clearCredentials);
 
   $("#cloud-test").addEventListener("click", async () => {
     if (busy) return;
@@ -122,7 +127,9 @@ export function setupCloudStorage({ toast, onChange }) {
   });
 
   $("#cloud-disconnect").addEventListener("click", async () => {
-    if (busy || !window.confirm("Disconnect cloud storage? Existing backups stay in the bucket. Saved credentials will be removed from this deployment.")) return;
+    if (busy) return;
+    const confirmed = await confirmAction("Existing backups stay in the bucket. Saved credentials will be removed from this deployment.", { title: "Disconnect cloud storage?", confirmLabel: "Disconnect" });
+    if (!confirmed || busy) return;
     setBusy(true);
     try {
       await api("DELETE", "/settings/cloud-storage");

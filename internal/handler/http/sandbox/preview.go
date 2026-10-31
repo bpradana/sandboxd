@@ -58,3 +58,24 @@ func (h *Handler) RevokePreview(c fiber.Ctx) error {
 	}
 	return success(c, http.StatusOK, "preview", "preview closed", nil)
 }
+
+// ListPorts godoc
+// @Summary List the sandbox's listening TCP ports
+// @Description Reports every TCP socket accepting connections inside the sandbox's network namespace, so a client can find a development server without being told its port. Ports not bound to loopback or the unspecified address are listed with previewable false: a preview reaches the sandbox over loopback only.
+// @Tags previews
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Sandbox ID"
+// @Success 200 {object} presentation.ListeningPortsEnvelopeDoc
+// @Failure 401,404,409 {object} presentation.ErrorResponseDoc
+// @Router /sandboxes/{id}/ports [get]
+func (h *Handler) ListPorts(c fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
+	span := startSpan(c, "handler.sandbox.ListPorts")
+	defer span.End()
+	result, err := h.service.ListeningPorts(c.Context(), c.Params(paramID))
+	if err != nil {
+		return serviceError(c, span, "preview", err)
+	}
+	return success(c, http.StatusOK, "preview", "port list success", result)
+}

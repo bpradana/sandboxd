@@ -151,3 +151,22 @@ func TestProxyRelaysWebSocketAndClosesItOnRevoke(t *testing.T) {
 		t.Fatal("revoked websocket remains open")
 	}
 }
+
+func TestListReportsOnlyThisSandboxesLivePreviews(t *testing.T) {
+	m, session, _ := previewFixture(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "app")
+	}))
+
+	sessions := m.List("sandbox")
+	if len(sessions) != 1 || sessions[0].ID != session.ID || sessions[0].Port != 3000 {
+		t.Fatalf("a sandbox's own preview should be listed: %+v", sessions)
+	}
+	if other := m.List("another-sandbox"); len(other) != 0 {
+		t.Errorf("previews belong to one sandbox, got %+v", other)
+	}
+	// A revoked preview is gone, not merely closed.
+	m.Revoke("sandbox", session.ID)
+	if sessions := m.List("sandbox"); len(sessions) != 0 {
+		t.Errorf("a revoked preview is still listed: %+v", sessions)
+	}
+}

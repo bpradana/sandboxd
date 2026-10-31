@@ -308,6 +308,8 @@ func (e *linuxEngine) start(ctx context.Context, inst *instance, lower string) (
 		}
 	}
 
+	inst.lower = lower
+
 	_, cgroupFile, err := e.cgroups.Create(inst.id, cgroup.Limits{
 		CPUMillis: inst.spec.Limits.CPUMillis,
 		MemoryMB:  inst.spec.Limits.MemoryMB,

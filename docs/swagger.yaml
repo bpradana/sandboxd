@@ -13,6 +13,18 @@ definitions:
         minimum: 1
         type: integer
     type: object
+  presentation.AllocatedResponse:
+    properties:
+      cpu_millis:
+        example: 3000
+        type: integer
+      memory_mb:
+        example: 1536
+        type: integer
+      storage_mb:
+        example: 1536
+        type: integer
+    type: object
   presentation.BuildInfoDoc:
     properties:
       build_time:
@@ -36,6 +48,59 @@ definitions:
         example: staging.3fa41bc
         type: string
     type: object
+  presentation.CapacityEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.CapacityResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.CapacityResponse:
+    properties:
+      allocated:
+        $ref: '#/definitions/presentation.AllocatedResponse'
+      architecture:
+        example: arm64
+        type: string
+      host:
+        $ref: '#/definitions/presentation.HostCapacityResponse'
+      images:
+        example:
+        - alpine
+        - python-ready
+        items:
+          type: string
+        type: array
+      node:
+        example: sandboxd-1
+        type: string
+      ready:
+        description: |-
+          Ready is false when the engine failed its preflight checks, in which
+          case this host can report capacity it cannot actually use.
+        example: true
+        type: boolean
+      sandboxes:
+        $ref: '#/definitions/presentation.SandboxSlotsResponse'
+      snapshots:
+        description: |-
+          Snapshots reports whether cloud storage is configured. A host without
+          it cannot materialize an image it does not already have.
+        example: true
+        type: boolean
+    type: object
   presentation.CloudStorageEnvelopeDoc:
     properties:
       code:
@@ -57,6 +122,11 @@ definitions:
     type: object
   presentation.CloudStorageRequest:
     properties:
+      accelerate:
+        description: |-
+          Accelerate uses S3 Transfer Acceleration, which must also be enabled on
+          the bucket itself. AWS S3 only, and it is billed per gigabyte.
+        type: boolean
       access_key_id:
         maxLength: 256
         type: string
@@ -96,6 +166,8 @@ definitions:
     type: object
   presentation.CloudStorageResponse:
     properties:
+      accelerate:
+        type: boolean
       auth_mode:
         type: string
       bucket:
@@ -439,6 +511,46 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.HostCapacityResponse:
+    properties:
+      cpu_millis:
+        example: 8000
+        type: integer
+      memory_available_mb:
+        description: |-
+          MemoryAvailableMB is the kernel's estimate of what can still be
+          allocated without swapping, not simply unused memory.
+        example: 11020
+        type: integer
+      memory_mb:
+        example: 16384
+        type: integer
+      storage_free_mb:
+        example: 51200
+        type: integer
+      storage_total_mb:
+        example: 65536
+        type: integer
+    type: object
+  presentation.ImageEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.ImageResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
   presentation.ImageListEnvelopeDoc:
     properties:
       code:
@@ -461,8 +573,21 @@ definitions:
     type: object
   presentation.ImageResponse:
     properties:
+      architecture:
+        description: |-
+          Architecture is set for an image held in cloud storage, which can only
+          be materialized on a host of the same architecture.
+        example: arm64
+        type: string
       created_at:
         type: string
+      local:
+        description: |-
+          Local reports whether this host already holds the image. One that is
+          not local is still usable: the first sandbox asking for it downloads
+          and imports it, which takes about as long as restoring a snapshot.
+        example: true
+        type: boolean
       name:
         example: alpine
         type: string
@@ -490,6 +615,45 @@ definitions:
       storage_mb:
         example: 512
         type: integer
+    type: object
+  presentation.ListeningPortResponse:
+    properties:
+      address:
+        description: Address is the address the socket is bound to, as the sandbox
+          sees it.
+        example: 0.0.0.0
+        type: string
+      port:
+        example: 3000
+        type: integer
+      previewable:
+        description: |-
+          Previewable reports whether a preview can reach this port. Previews
+          connect over the sandbox's loopback interface, so a server bound to
+          another address is listed but cannot be previewed until it also
+          listens on 127.0.0.1 or 0.0.0.0.
+        example: true
+        type: boolean
+    type: object
+  presentation.ListeningPortsEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.ListeningPortResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
     type: object
   presentation.MkdirRequest:
     properties:
@@ -527,6 +691,37 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.PreviewListEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/preview.Session'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.PromoteSnapshotRequest:
+    properties:
+      image:
+        description: Image must match [a-z0-9][a-z0-9._-]{0,63} and must not already
+          exist.
+        example: python-ready
+        maxLength: 64
+        type: string
+    required:
+    - image
+    type: object
   presentation.ReadinessResponseDoc:
     properties:
       build:
@@ -549,6 +744,79 @@ definitions:
         type: string
     required:
     - id
+    type: object
+  presentation.SandboxChangeResponse:
+    properties:
+      kind:
+        description: |-
+          Kind is added for a path the image did not have, modified for one it
+          had that was then written to, deleted for one the sandbox removed, and
+          replaced for a directory emptied of everything the image put in it.
+        enum:
+        - added
+        - modified
+        - deleted
+        - replaced
+        example: added
+        type: string
+      mode:
+        example: "0644"
+        type: string
+      modified_at:
+        description: ModifiedAt is absent for a deletion, for the same reason as Type.
+        type: string
+      path:
+        example: /root/app.py
+        type: string
+      seeded:
+        description: |-
+          Seeded marks a path the daemon writes into every sandbox: its hostname,
+          hosts and resolv.conf, the sandbox account, and the directories mounts
+          go on. It reports that the daemon writes there, not that the workload
+          left it alone, so hide these only when looking for the workload's work.
+        example: false
+        type: boolean
+      size:
+        example: 128
+        type: integer
+      type:
+        description: |-
+          Type is file, dir, symlink or special. A deletion has none: the entry
+          is gone, and only the fact that it went is recorded.
+        example: file
+        type: string
+    type: object
+  presentation.SandboxChangesEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        allOf:
+        - $ref: '#/definitions/presentation.SandboxChangesResponse'
+        description: Data is the response payload.
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
+  presentation.SandboxChangesResponse:
+    properties:
+      entries:
+        items:
+          $ref: '#/definitions/presentation.SandboxChangeResponse'
+        type: array
+      truncated:
+        description: |-
+          Truncated reports that the sandbox changed more paths than the daemon
+          is willing to list, so what follows is a prefix and not the whole set.
+        example: false
+        type: boolean
     type: object
   presentation.SandboxEnvelopeDoc:
     properties:
@@ -630,6 +898,12 @@ definitions:
         type: string
       next_snapshot_at:
         type: string
+      node:
+        description: |-
+          Node is the daemon this sandbox lives on. A sandbox is kernel state on
+          one machine; anything routing across several needs to know which.
+        example: sandboxd-1
+        type: string
       snapshot_in_progress:
         type: boolean
       snapshot_policy:
@@ -644,6 +918,15 @@ definitions:
         type: string
       stopped_at:
         type: string
+    type: object
+  presentation.SandboxSlotsResponse:
+    properties:
+      active:
+        example: 3
+        type: integer
+      max:
+        example: 64
+        type: integer
     type: object
   presentation.SandboxStatsEnvelopeDoc:
     properties:
@@ -793,6 +1076,34 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.SnapshotJobResponse:
+    properties:
+      progress:
+        $ref: '#/definitions/presentation.SnapshotProgressResponse'
+      snapshot_id:
+        example: snap-4f1c2a9b8e7d6c5b4a3f2e1d
+        type: string
+    type: object
+  presentation.SnapshotJobsEnvelopeDoc:
+    properties:
+      code:
+        description: Code is the HTTP status code repeated in the response body.
+        example: 200
+        type: integer
+      data:
+        description: Data is the response payload.
+        items:
+          $ref: '#/definitions/presentation.SnapshotJobResponse'
+        type: array
+      entity:
+        description: Entity identifies the API domain that produced the response.
+        example: sandbox
+        type: string
+      message:
+        description: Message is the client-facing success message.
+        example: sandbox request success
+        type: string
+    type: object
   presentation.SnapshotListEnvelopeDoc:
     properties:
       code:
@@ -813,6 +1124,28 @@ definitions:
         example: sandbox request success
         type: string
     type: object
+  presentation.SnapshotProgressResponse:
+    properties:
+      bytes_done:
+        description: BytesDone counts archive bytes finished in this phase.
+        example: 50331648
+        type: integer
+      bytes_total:
+        description: BytesTotal is the archive size, or 0 while capture is still deciding
+          it.
+        example: 202375168
+        type: integer
+      operation:
+        description: Operation is backup or restore.
+        example: backup
+        type: string
+      phase:
+        description: |-
+          Phase is capturing, uploading or verifying for a backup, and
+          downloading or importing for a restore.
+        example: uploading
+        type: string
+    type: object
   presentation.SnapshotResponse:
     properties:
       architecture:
@@ -829,6 +1162,12 @@ definitions:
         type: object
       mode:
         type: string
+      progress:
+        allOf:
+        - $ref: '#/definitions/presentation.SnapshotProgressResponse'
+        description: |-
+          Progress is present only while a backup or restore of this snapshot is
+          running on this host. It is live state, not part of the stored manifest.
       sandbox_id:
         type: string
       sha256:
@@ -928,6 +1267,32 @@ info:
   title: sandboxd API
   version: "1.0"
 paths:
+  /api/v1/capacity:
+    get:
+      description: 'Reports who this daemon is, whether its engine is usable, how
+        many sandbox slots are free, the limits already promised to running sandboxes,
+        what the machine underneath actually has, and which base images it can start
+        from. A sandbox is kernel state on one host, so anything placing work across
+        several daemons chooses from this rather than from scraped metrics. Promised
+        and actual capacity are reported separately: a daemon can be configured to
+        promise more than its host can deliver, and whether to allow that is the caller''s
+        decision.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: This daemon's capacity.
+          schema:
+            $ref: '#/definitions/presentation.CapacityEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Report this daemon's capacity
+      tags:
+      - sandboxes
   /api/v1/images:
     get:
       description: Lists the base root filesystems sandboxes can be created from.
@@ -952,6 +1317,42 @@ paths:
       summary: List base images
       tags:
       - images
+  /api/v1/images/{name}:
+    delete:
+      description: Deletes a base image from this host, and from cloud storage if
+        it was promoted from a snapshot, so other hosts stop resolving the name. Sandboxes
+        already running on the image keep their own mount and are unaffected. Removing
+        a promoted image is also what frees the snapshot underneath it for deletion.
+      parameters:
+      - description: Image name.
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Image removed.
+          schema:
+            $ref: '#/definitions/presentation.EmptyEnvelopeDoc'
+        "400":
+          description: Unusable image name.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: No such image here or in cloud storage.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Remove a base image
+      tags:
+      - sandboxes
   /api/v1/sandboxes:
     get:
       description: Lists sandboxes held by this server, including recently stopped
@@ -1100,6 +1501,45 @@ paths:
       security:
       - BearerAuth: []
       summary: Get a sandbox
+      tags:
+      - sandboxes
+  /api/v1/sandboxes/{id}/changes:
+    get:
+      description: Reports every path the sandbox's workload created, wrote to or
+        removed since it started, read straight out of the overlay's writable layer
+        rather than by comparing the sandbox against its base image. Entries marked
+        seeded are paths the daemon writes into every sandbox (hostname, hosts, resolv.conf,
+        the sandbox account, and the directories mounts go on); hide them when looking
+        for the workload's own work. A sandbox that changed more paths than the daemon
+        will list is reported truncated.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: What the workload changed.
+          schema:
+            $ref: '#/definitions/presentation.SandboxChangesEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running (sandbox_not_running).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List what the sandbox changed
       tags:
       - sandboxes
   /api/v1/sandboxes/{id}/exec:
@@ -1537,6 +1977,43 @@ paths:
       summary: Extend a sandbox's lifetime
       tags:
       - sandboxes
+  /api/v1/sandboxes/{id}/previews:
+    get:
+      description: Reports the previews this daemon currently serves for the sandbox,
+        with the URL and port of each. Previews are state in the daemon that opened
+        them, like the sandbox itself, so anything routing across several daemons
+        rebuilds preview ownership by asking each of them rather than remembering
+        it.
+      parameters:
+      - description: Sandbox ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Open previews.
+          schema:
+            $ref: '#/definitions/presentation.PreviewListEnvelopeDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Sandbox not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Sandbox is not running (sandbox_not_running).
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List a sandbox's open previews
+      tags:
+      - previews
   /api/v1/sandboxes/{id}/sessions:
     get:
       parameters:
@@ -1790,11 +2267,13 @@ paths:
     get:
       description: 'Upgrades to a WebSocket attached to a login shell on a pseudo-terminal
         inside the sandbox: a new one, or with terminal_id a running one (recent output
-        is replayed). Binary messages carry raw terminal input (client to server)
-        and output (server to client). Text messages carry JSON control messages:
-        the server first sends {"type":"attached","terminal_id":"..."}; the client
-        sends {"type":"resize","cols":N,"rows":N} and {"type":"close"} to end the
-        terminal; the server sends {"type":"exit","exit_code":N} or {"type":"error","error":"..."}
+        is replayed). With command, the shell runs that command line instead of an
+        interactive session, so the terminal is a live process log that still takes
+        Ctrl-C and resizes, and ends with the command. Binary messages carry raw terminal
+        input (client to server) and output (server to client). Text messages carry
+        JSON control messages: the server first sends {"type":"attached","terminal_id":"..."};
+        the client sends {"type":"resize","cols":N,"rows":N} and {"type":"close"}
+        to end the terminal; the server sends {"type":"exit","exit_code":N} or {"type":"error","error":"..."}
         before closing. Closing the socket without "close" detaches: the shell keeps
         running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer
         attachment takes over from an older one. Authenticate with a bearer key or
@@ -1833,6 +2312,11 @@ paths:
         - bash
         in: query
         name: shell
+        type: string
+      - description: Run this command line on the terminal instead of an interactive
+          shell.
+        in: query
+        name: command
         type: string
       - description: Initial working directory.
         in: query
@@ -2130,6 +2614,66 @@ paths:
       summary: Get snapshot progress and metadata
       tags:
       - snapshots
+  /api/v1/snapshots/{id}/image:
+    post:
+      consumes:
+      - application/json
+      description: 'Turns a ready snapshot into a base image that later sandboxes
+        can start from, so prepared work (installed packages, checked-out source)
+        costs nothing per start instead of being installed again every time. The archive
+        is downloaded and extracted the way a restore extracts it: ownership shifted
+        into the sandbox id range, setuid bits stripped, device nodes skipped. The
+        snapshot must have been taken on this architecture, and the image name must
+        be free.'
+      parameters:
+      - description: Snapshot ID.
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Name for the new base image.
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/presentation.PromoteSnapshotRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: The image that was created.
+          schema:
+            $ref: '#/definitions/presentation.ImageEnvelopeDoc'
+        "400":
+          description: Invalid request body, unusable image name, or a snapshot from
+            another architecture or format.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "401":
+          description: Missing or invalid API key.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Snapshot not found.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Image name already taken, or the snapshot is not ready.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "429":
+          description: Maximum concurrent snapshot operations reached.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "503":
+          description: Filesystem snapshots are disabled.
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: Import a snapshot as a base image
+      tags:
+      - snapshots
   /healthz:
     get:
       description: Returns 204 when the process is alive.
@@ -2158,6 +2702,43 @@ paths:
       summary: Readiness probe
       tags:
       - health
+  /sandboxes/{id}/ports:
+    get:
+      description: 'Reports every TCP socket accepting connections inside the sandbox''s
+        network namespace, so a client can find a development server without being
+        told its port. Ports not bound to loopback or the unspecified address are
+        listed with previewable false: a preview reaches the sandbox over loopback
+        only.'
+      parameters:
+      - description: Sandbox ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.ListeningPortsEnvelopeDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List the sandbox's listening TCP ports
+      tags:
+      - previews
   /sandboxes/{id}/previews:
     delete:
       consumes:
@@ -2283,6 +2864,29 @@ paths:
       security:
       - BearerAuth: []
       summary: Configure scheduled and pre-expiry backups
+      tags:
+      - snapshots
+  /snapshots/progress:
+    get:
+      description: Reports the progress of every backup and restore running on this
+        host, read from memory alone. Listing snapshots fetches each manifest from
+        cloud storage and is far too expensive to poll at the rate a progress bar
+        wants; this is not. Jobs disappear from the list when they finish, and a host
+        restart leaves none behind.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presentation.SnapshotJobsEnvelopeDoc'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/presentation.ErrorResponseDoc'
+      security:
+      - BearerAuth: []
+      summary: List running backups and restores
       tags:
       - snapshots
 schemes:

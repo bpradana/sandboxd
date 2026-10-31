@@ -101,3 +101,19 @@ func (h *Handler) DeleteSnapshot(c fiber.Ctx) error {
 	}
 	return success(c, http.StatusOK, "snapshot", "snapshot delete success", nil)
 }
+
+// ListSnapshotJobs godoc
+// @Summary List running backups and restores
+// @Description Reports the progress of every backup and restore running on this host, read from memory alone. Listing snapshots fetches each manifest from cloud storage and is far too expensive to poll at the rate a progress bar wants; this is not. Jobs disappear from the list when they finish, and a host restart leaves none behind.
+// @Tags snapshots
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} presentation.SnapshotJobsEnvelopeDoc
+// @Failure 401 {object} presentation.ErrorResponseDoc
+// @Router /snapshots/progress [get]
+func (h *Handler) ListSnapshotJobs(c fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
+	span := startSpan(c, "handler.sandbox.ListSnapshotJobs")
+	defer span.End()
+	return success(c, http.StatusOK, "snapshot", "snapshot job list success", h.service.SnapshotJobs())
+}

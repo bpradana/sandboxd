@@ -45,6 +45,10 @@ type instance struct {
 	spec Spec
 	dir  string
 
+	// lower is the read-only layer under the sandbox's overlay: the base
+	// image, or the private tree a restored snapshot was imported into.
+	lower string
+
 	cmd        *exec.Cmd
 	pid        int
 	attachment *netns.Attachment

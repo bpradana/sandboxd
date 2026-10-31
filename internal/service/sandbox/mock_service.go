@@ -44,6 +44,36 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// Capacity mocks base method.
+func (m *MockService) Capacity(ctx context.Context) (*presentation.CapacityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Capacity", ctx)
+	ret0, _ := ret[0].(*presentation.CapacityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Capacity indicates an expected call of Capacity.
+func (mr *MockServiceMockRecorder) Capacity(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Capacity", reflect.TypeOf((*MockService)(nil).Capacity), ctx)
+}
+
+// Changes mocks base method.
+func (m *MockService) Changes(ctx context.Context, id string) (*presentation.SandboxChangesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Changes", ctx, id)
+	ret0, _ := ret[0].(*presentation.SandboxChangesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Changes indicates an expected call of Changes.
+func (mr *MockServiceMockRecorder) Changes(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changes", reflect.TypeOf((*MockService)(nil).Changes), ctx, id)
+}
+
 // CloseSession mocks base method.
 func (m *MockService) CloseSession(ctx context.Context, id, sessionID string) error {
 	m.ctrl.T.Helper()
@@ -309,6 +339,21 @@ func (mr *MockServiceMockRecorder) ListImages(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListImages", reflect.TypeOf((*MockService)(nil).ListImages), ctx)
 }
 
+// ListPreviews mocks base method.
+func (m *MockService) ListPreviews(ctx context.Context, id string) ([]preview.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPreviews", ctx, id)
+	ret0, _ := ret[0].([]preview.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPreviews indicates an expected call of ListPreviews.
+func (mr *MockServiceMockRecorder) ListPreviews(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPreviews", reflect.TypeOf((*MockService)(nil).ListPreviews), ctx, id)
+}
+
 // ListSessions mocks base method.
 func (m *MockService) ListSessions(ctx context.Context, id string) ([]presentation.SessionResponse, error) {
 	m.ctrl.T.Helper()
@@ -337,6 +382,21 @@ func (m *MockService) ListSnapshots(ctx context.Context) ([]presentation.Snapsho
 func (mr *MockServiceMockRecorder) ListSnapshots(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSnapshots", reflect.TypeOf((*MockService)(nil).ListSnapshots), ctx)
+}
+
+// ListeningPorts mocks base method.
+func (m *MockService) ListeningPorts(ctx context.Context, id string) ([]presentation.ListeningPortResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListeningPorts", ctx, id)
+	ret0, _ := ret[0].([]presentation.ListeningPortResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListeningPorts indicates an expected call of ListeningPorts.
+func (mr *MockServiceMockRecorder) ListeningPorts(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListeningPorts", reflect.TypeOf((*MockService)(nil).ListeningPorts), ctx, id)
 }
 
 // Mkdir mocks base method.
@@ -368,6 +428,21 @@ func (m *MockService) OpenFile(ctx context.Context, id string, req presentation.
 func (mr *MockServiceMockRecorder) OpenFile(ctx, id, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockService)(nil).OpenFile), ctx, id, req)
+}
+
+// PromoteSnapshot mocks base method.
+func (m *MockService) PromoteSnapshot(ctx context.Context, id string, req presentation.PromoteSnapshotRequest) (*presentation.ImageResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PromoteSnapshot", ctx, id, req)
+	ret0, _ := ret[0].(*presentation.ImageResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PromoteSnapshot indicates an expected call of PromoteSnapshot.
+func (mr *MockServiceMockRecorder) PromoteSnapshot(ctx, id, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PromoteSnapshot", reflect.TypeOf((*MockService)(nil).PromoteSnapshot), ctx, id, req)
 }
 
 // Ready mocks base method.
@@ -410,6 +485,20 @@ func (m *MockService) RemoveFile(ctx context.Context, id string, req presentatio
 func (mr *MockServiceMockRecorder) RemoveFile(ctx, id, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFile", reflect.TypeOf((*MockService)(nil).RemoveFile), ctx, id, req)
+}
+
+// RemoveImage mocks base method.
+func (m *MockService) RemoveImage(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveImage", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveImage indicates an expected call of RemoveImage.
+func (mr *MockServiceMockRecorder) RemoveImage(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveImage", reflect.TypeOf((*MockService)(nil).RemoveImage), ctx, name)
 }
 
 // RevokePreview mocks base method.
@@ -469,6 +558,20 @@ func (m *MockService) SetSnapshotPolicy(arg0 context.Context, arg1 string, arg2 
 func (mr *MockServiceMockRecorder) SetSnapshotPolicy(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSnapshotPolicy", reflect.TypeOf((*MockService)(nil).SetSnapshotPolicy), arg0, arg1, arg2)
+}
+
+// SnapshotJobs mocks base method.
+func (m *MockService) SnapshotJobs() []presentation.SnapshotJobResponse {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SnapshotJobs")
+	ret0, _ := ret[0].([]presentation.SnapshotJobResponse)
+	return ret0
+}
+
+// SnapshotJobs indicates an expected call of SnapshotJobs.
+func (mr *MockServiceMockRecorder) SnapshotJobs() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SnapshotJobs", reflect.TypeOf((*MockService)(nil).SnapshotJobs))
 }
 
 // StatFile mocks base method.

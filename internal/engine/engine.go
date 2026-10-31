@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bpradana/sandboxd/internal/engine/image"
 	"github.com/bpradana/sandboxd/internal/model"
 )
 
@@ -22,6 +23,8 @@ var (
 	ErrNotReady            = errors.New("sandbox engine is not ready")
 	ErrSandboxNotFound     = errors.New("sandbox not found")
 	ErrImageNotFound       = errors.New("image not found")
+	ErrImageExists         = errors.New("image already exists")
+	ErrInvalidImageName    = errors.New("invalid image name")
 	ErrSessionNotFound     = errors.New("session not found")
 	ErrSessionBusy         = errors.New("session is busy")
 	ErrSessionClosed       = errors.New("session is closed")
@@ -114,17 +117,19 @@ type SessionExecRequest struct {
 
 // TerminalRequest opens a new terminal, an interactive command on a
 // pseudo-terminal, under the caller-chosen ID, or with Attach reattaches to
-// a running one (Argv, Env, and Cwd are then ignored). An empty Argv starts
-// a login shell (bash when the image has it, else sh).
+// a running one (Argv, Command, Env, and Cwd are then ignored). An empty Argv
+// starts a login shell (bash when the image has it, else sh), interactive or,
+// with Command, running that command line and exiting with it.
 type TerminalRequest struct {
-	ID     string
-	Attach bool
-	User   string
-	Argv   []string
-	Env    map[string]string
-	Cwd    string
-	Cols   uint16
-	Rows   uint16
+	ID      string
+	Attach  bool
+	User    string
+	Argv    []string
+	Command string
+	Env     map[string]string
+	Cwd     string
+	Cols    uint16
+	Rows    uint16
 	// Ready, if set, runs once the terminal is attached, before any output.
 	Ready func() error
 }
@@ -152,6 +157,44 @@ type FileInfo struct {
 	LinkTarget string
 }
 
+// Change kinds. A sandbox's writable overlay layer records what its workload
+// did to the image beneath it, and these are the four things it can say.
+const (
+	// ChangeAdded is a path the image did not have.
+	ChangeAdded = "added"
+	// ChangeModified is a path copied up from the image and then written to.
+	ChangeModified = "modified"
+	// ChangeDeleted is a path the image had and the sandbox removed.
+	ChangeDeleted = "deleted"
+	// ChangeReplaced is a directory emptied of everything the image put in
+	// it, so none of the image's entries show through any more.
+	ChangeReplaced = "replaced"
+)
+
+// Change is one filesystem entry the sandbox's workload created, wrote to, or
+// removed since it started. Size, Mode and ModTime are unset for a deletion,
+// which leaves nothing behind to describe.
+type Change struct {
+	Path    string
+	Kind    string
+	Type    string
+	Size    int64
+	Mode    os.FileMode
+	ModTime time.Time
+	// Seeded marks a path the daemon writes into every sandbox (its hostname,
+	// hosts and resolv.conf, the sandbox account, and the directories mounts
+	// go on). It says the daemon writes there, not that the workload did not.
+	Seeded bool
+}
+
+// ChangeSet is a sandbox's whole change list, or as much of it as the engine
+// is willing to walk: a workload that installs a large package tree can
+// produce far more entries than anyone wants to read.
+type ChangeSet struct {
+	Entries   []Change
+	Truncated bool
+}
+
 type Stats struct {
 	MemoryBytes       int64
 	MemoryPeakBytes   int64
@@ -164,9 +207,38 @@ type Stats struct {
 	StorageLimitBytes int64
 }
 
+// HostCapacity is what the machine has, read from the kernel rather than
+// from configuration: a daemon can be configured to promise more than its
+// host can deliver, and a placement layer should be able to see that.
+type HostCapacity struct {
+	Architecture string
+	CPUMillis    int
+	MemoryMB     int
+	// MemoryAvailableMB is the kernel's estimate of what can still be
+	// allocated without swapping, not simply unused memory.
+	MemoryAvailableMB int
+	StorageTotalMB    int
+	StorageFreeMB     int
+}
+
 type Image struct {
 	Name      string
 	CreatedAt time.Time
+}
+
+// ValidImageName reports whether name can be a base image, so a caller can be
+// refused before an archive is downloaded on its behalf.
+func ValidImageName(name string) bool { return image.ValidName(name) }
+
+// ListeningPort is a TCP socket accepting connections inside a sandbox.
+// Loopback and Unspecified say whether DialSandbox can reach it: it dials
+// IPv4 loopback, so a port bound to another address is listed but not
+// reachable.
+type ListeningPort struct {
+	Port        int
+	Address     string
+	Loopback    bool
+	Unspecified bool
 }
 
 // Exit reports that a sandbox's init process ended without the engine being
@@ -186,10 +258,18 @@ type Engine interface {
 	Stop(ctx context.Context) error
 	// Ready reports whether the engine can create sandboxes.
 	Ready() error
+	// HostCapacity reports the machine's own CPU, memory and free storage.
+	HostCapacity() (*HostCapacity, error)
 	// Exits delivers unexpected init exits; the channel is closed by Stop.
 	Exits() <-chan Exit
 
 	Images(ctx context.Context) ([]Image, error)
+	// ImportImage adds a base image from a root filesystem archive, refusing
+	// to expand more than maxBytes so a small archive cannot fill the host.
+	ImportImage(ctx context.Context, name string, src io.Reader, maxBytes int64) (*Image, error)
+	// RemoveImage deletes a base image from this host. Sandboxes already
+	// running on it keep their own mount and are unaffected.
+	RemoveImage(ctx context.Context, name string) error
 
 	Create(ctx context.Context, spec Spec) (*Info, error)
 	Destroy(ctx context.Context, id string) error
@@ -199,7 +279,13 @@ type Engine interface {
 	CaptureCheckpoint(ctx context.Context, id string, dst io.Writer, maxBytes int64) error
 	// DialSandbox connects only to IPv4 loopback inside this sandbox's network namespace.
 	DialSandbox(ctx context.Context, id string, port int) (net.Conn, error)
+	// ListeningPorts reports the TCP sockets listening inside this sandbox's
+	// network namespace, lowest port first.
+	ListeningPorts(ctx context.Context, id string) ([]ListeningPort, error)
 	Stats(ctx context.Context, id string) (*Stats, error)
+	// Changes reports what the workload did to the filesystem it was given,
+	// read from the overlay's writable layer rather than by comparing trees.
+	Changes(ctx context.Context, id string) (*ChangeSet, error)
 
 	Exec(ctx context.Context, id string, req ExecRequest, out OutputFunc) (*ExecResult, error)
 	OpenSession(ctx context.Context, id, sessionID string, req SessionRequest) error

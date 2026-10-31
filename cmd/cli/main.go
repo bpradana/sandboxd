@@ -8,13 +8,17 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
+	"github.com/bpradana/sandboxd/internal/client"
 	"github.com/bpradana/sandboxd/internal/config"
 	"github.com/bpradana/sandboxd/internal/engine"
 	fxmodule "github.com/bpradana/sandboxd/internal/fx"
+	"github.com/bpradana/sandboxd/internal/helper/buildinfo"
 	"github.com/bpradana/sandboxd/internal/helper/runapp"
+	mcpserver "github.com/bpradana/sandboxd/internal/mcp"
 )
 
 // stopTimeout mirrors cmd/api: it must exceed SANDBOX_DESTROY_TIMEOUT.
@@ -33,6 +37,7 @@ func main() {
 	}
 
 	rootCmd.AddCommand(newStartCommand())
+	rootCmd.AddCommand(newMCPCommand())
 	rootCmd.AddCommand(newImageCommand())
 	rootCmd.AddCommand(newCleanupCommand())
 
@@ -50,6 +55,40 @@ func newStartCommand() *cobra.Command {
 			runapp.Run(fx.New(fxmodule.Module, fx.NopLogger, fx.StopTimeout(stopTimeout)))
 		},
 	}
+}
+
+// newMCPCommand serves the Model Context Protocol over stdin and stdout, the
+// transport MCP clients launch a server with. It is a client of the daemon's
+// REST API like any other, so it needs no privileges of its own and can point
+// at a daemon on another host.
+func newMCPCommand() *cobra.Command {
+	var baseURL, apiKey string
+	cmd := &cobra.Command{
+		Use:   "mcp",
+		Short: "Serve sandboxd to AI agents over the Model Context Protocol (stdio)",
+		Long: "Serve sandboxd as MCP tools on stdin and stdout, so an AI agent can create sandboxes,\n" +
+			"run commands and files in them, and open app previews.\n\n" +
+			"The daemon must already be running. SANDBOXD_URL and SANDBOXD_API_KEY are read when\n" +
+			"the matching flags are not given.",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if baseURL == "" {
+				baseURL = os.Getenv("SANDBOXD_URL")
+			}
+			if apiKey == "" {
+				apiKey = os.Getenv("SANDBOXD_API_KEY")
+			}
+			api, err := client.New(baseURL, apiKey)
+			if err != nil {
+				return err
+			}
+			// stdout carries the protocol, so nothing else may be written there.
+			return mcpserver.NewServer(api, buildinfo.Read("production")).Run(cmd.Context(), &mcp.StdioTransport{})
+		},
+	}
+	cmd.Flags().StringVar(&baseURL, "url", "", "sandboxd API base URL (default "+client.DefaultBaseURL+")")
+	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key sent as a bearer token")
+	return cmd
 }
 
 func newImageCommand() *cobra.Command {

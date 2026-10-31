@@ -57,6 +57,7 @@ $ curl -s -XPOST localhost:8080/api/v1/sandboxes/sbx-1f0c…/exec \
 - [Base images](#base-images)
 - [Web console](#web-console)
 - [API](#api)
+- [Running more than one daemon](#running-more-than-one-daemon)
 - [Behaviour reference](#behaviour-reference)
 - [Configuration](#configuration)
 - [Operations](#operations)
@@ -76,10 +77,12 @@ $ curl -s -XPOST localhost:8080/api/v1/sandboxes/sbx-1f0c…/exec \
 | 💾 **Disk-backed storage** | Each sandbox gets its own ext4 or btrfs filesystem in a sparse image file, capped at its storage size and allocated as data is written. tmpfs is available as an alternative. |
 | ⚡ **Three ways to run code** | One-shot `exec` (buffered or streamed as Server-Sent Events), persistent shell sessions that keep state between calls, and interactive PTY terminals over WebSocket that survive disconnects. |
 | 📁 **Safe file API** | Upload, download, list, stat, mkdir, and remove. Every path resolves inside the sandbox, including through symlinks. |
+| 🔍 **Knows what changed** | Every sandbox is an overlay on its image, so the writable layer already records what the workload created, edited, and deleted. `GET /sandboxes/{id}/changes` reads it: one walk of what changed, never a comparison against the image. |
+| 🧬 **Snapshots become images** | Promote a snapshot to a base image and the packages, sources, and setup one sandbox prepared become the starting point of every sandbox after it, at no cost per start. |
 | ☁️ **Cloud filesystem snapshots** | Save-and-stop a sandbox into S3-compatible storage, then restore its files, installed packages, and configuration on the same host or another host of the same architecture. |
 | 🌐 **Controlled networking** | `none` (loopback only) or `egress` (internet through NAT, with private, link-local, cloud-metadata, and host addresses blocked). |
 | 🧹 **Automatic cleanup** | Sandboxes are reaped at their TTL or when idle. Shutdown destroys every sandbox, and startup removes anything a crash left behind. |
-| 🖥️ **Web console** | Create, monitor, extend, and kill sandboxes from the browser, with terminal tabs that persist across page reloads. |
+| 🖥️ **Web console** | Create, monitor, extend, and kill sandboxes from the browser, with terminal and run tabs that persist across page reloads. |
 | 📊 **Operable** | Prometheus metrics, OpenTelemetry tracing, structured logs, health probes, and an OpenAPI specification. |
 
 ## Quick start
@@ -395,9 +398,9 @@ The script builds from the official Debian slim image for the Docker host's CPU
 architecture, includes Bash, Python 3, curl, CA certificates, procps and iproute2,
 and writes `target/debian-<release>-<arch>.tar.gz`. It imports the archive through
 the dev container and refuses to replace an existing sandbox image. Refresh the
-console and select **debian** when creating a sandbox. For a quick preview, run
-`python3 -m http.server 3000 --bind 127.0.0.1` in its terminal, then open **Preview**
-on port `3000`.
+console and select **debian** when creating a sandbox. For a quick preview, open
+**Run** on it and run `python3 -m http.server 3000 --bind 127.0.0.1`; the console
+finds port `3000` and shows the app beside the log.
 
 Imports are safe for untrusted tarballs:
 
@@ -420,6 +423,14 @@ you can:
 - watch CPU, memory, disk, and process counts live
 - extend or kill sandboxes
 - open any number of terminal tabs
+- open run tabs: one command's live log beside the app it serves
+
+Use the sidebar to search sandboxes and snapshots. The **+** button creates a
+sandbox; optional resource limits are tucked into the creation dialog. Switch
+between light and dark themes in the header. Outside editors and terminals,
+**N** opens sandbox creation and **/** focuses search. The active session's
+header provides shortcuts to Files, Run, and a new terminal. See the
+[console design](docs/design/README.md) for an editable desktop concept.
 
 Terminals are login shells on a real pseudo-terminal, so `vi`, `top`, Ctrl-C, job
 control, and resizing behave as they do locally. Reloading the page or losing the
@@ -430,6 +441,46 @@ The console is static files embedded in the binary, served with a strict
 Content-Security-Policy. It holds no secrets: every action goes through `/api/v1` with
 the key you enter, which is stored only in your browser. Anyone with a key gets a shell
 in any sandbox, so expose the console accordingly.
+
+## MCP server
+
+AI agents reach sandboxd over the Model Context Protocol. The server speaks
+stdio, the transport MCP clients launch a server with, and is a client of the
+REST API like any other: it holds no privileges of its own and can point at a
+daemon on another host.
+
+```console
+$ sandboxdctl mcp --url http://localhost:8080 --api-key "$SANDBOXD_API_KEY"
+```
+
+Register it with an MCP client, for example Claude Code:
+
+```console
+$ claude mcp add sandboxd -- sandboxdctl mcp --url http://localhost:8080
+```
+
+`SANDBOXD_URL` and `SANDBOXD_API_KEY` are read when the flags are omitted.
+Whatever the key is allowed to do, the agent can do; nothing more.
+
+| Tool | What an agent uses it for |
+| --- | --- |
+| `sandbox_create` · `sandbox_list` · `sandbox_destroy` | Get a disposable Linux machine, and give it back |
+| `sandbox_keepalive` | Extend one that is still in use |
+| `sandbox_exec` | Run a command and read its output |
+| `sandbox_start_service` | Start a server that keeps running after the call |
+| `sandbox_write_file` · `sandbox_read_file` · `sandbox_list_files` | Move code and results in and out |
+| `sandbox_ports` | Find what a started server is listening on |
+| `sandbox_preview` | Get a URL to hand to a person |
+
+Two of these exist because of how sandboxes behave, and the tool descriptions
+say so. `sandbox_exec` kills the command's process group when it returns, so
+backgrounding a server there loses it: `sandbox_start_service` runs it in a
+session, whose shell outlives the call. And a preview reaches the sandbox over
+loopback only, so `sandbox_preview` checks what is actually listening and says
+when the URL would not load rather than handing over a dead link.
+
+Sandboxes made through MCP default to a 30-minute lifetime, so an agent that
+forgets to call `sandbox_destroy` does not leave one running indefinitely.
 
 ## API
 
@@ -452,8 +503,9 @@ File contents are treated as text or download data, never rendered as HTML in
 the console. API keys stay in request headers. Files remain inside the existing
 sandbox storage and are included in filesystem snapshots.
 
-Run the file-explorer interaction tests with `npm --prefix web ci` followed by
-`npm --prefix web test` (Node 24). No browser dependencies are shipped to users.
+Run the file-explorer and run-tab interaction tests with `npm --prefix web ci`
+followed by `npm --prefix web test` (Node 24). No browser dependencies are
+shipped to users.
 
 ### Automatic backups and app previews
 
@@ -495,13 +547,58 @@ of `0` disables scheduling; `before_expiry: false` disables the final backup.
 `POST /api/v1/sandboxes/{id}/snapshots` with `{"keep_running": true}` creates
 an immediate checkpoint without stopping the sandbox.
 
-For a web app, start its HTTP server in a terminal or persistent session, click
-**Preview**, enter its port (for example `3000`), and choose **Open**. The preview
-appears alongside the terminal with **Refresh**, **New tab**, and **Close**.
+While a backup or restore is running, its snapshot card shows which phase it
+is in and how much of the archive has moved, and the snapshot's API responses
+carry the same thing:
+
+```json
+{ "status": "uploading",
+  "progress": { "operation": "backup", "phase": "uploading",
+                "bytes_done": 50331648, "bytes_total": 202375168 } }
+```
+
+`GET /api/v1/snapshots/progress` lists the same thing for every running job
+at once. Prefer it for polling: it reads this host's memory, while listing
+snapshots fetches every manifest from cloud storage and can take seconds
+against a remote bucket. Polling the list fast enough to animate a progress
+bar will starve the very transfer it is watching.
+
+A backup goes `capturing` → `uploading` → `verifying`, and a restore goes
+`downloading` → `importing`. `bytes_total` is `0` during capture, because an
+archive's size is only settled once it has been written; everything else
+reports against the archive size. A download counts bytes as they land, so a
+slow link still moves the bar; an upload counts a part once the store has
+accepted it, because the archive is read more than once per part to checksum
+it. Either way the total never falls, so a part restarted after a failure is
+never counted twice. Progress is live
+state held by the daemon that owns the job, not part of the stored manifest:
+a job interrupted by a restart reports no progress, the same way its manifest
+is read as failed once its deadline passes.
+
+For a web app, click **Run** on a running sandbox. A run tab opens in the same
+tab bar as the terminals: type a command such as `npm run dev`, choose **Run**,
+and its log fills the left half of the tab while the app it serves fills the
+right. **Preview** opens the same tab from the other end, with the cursor in
+the port box, for an app already serving from a terminal or session. The command runs on its own pseudo-terminal, so colours, progress bars
+and Ctrl-C work; **Stop** ends it and keeps the log, and editing the command and
+pressing Enter restarts it. Drag the divider to change the split.
+
+While a run tab is open the console polls
+`GET /api/v1/sandboxes/{id}/ports` and shows every TCP socket listening inside
+the sandbox as a chip. The first reachable one opens by itself, so a development
+server usually appears without anyone typing a port; click another chip, or type
+a port and choose **Open**, to switch. A server bound only to an address the
+preview cannot dial is shown greyed out, with a note to bind it to `0.0.0.0` or
+`127.0.0.1` instead. A run tab needs no command at all, which is what
+**Preview** opens: just the port of an app that is already serving.
+
 The proxy connects only to `127.0.0.1` inside that sandbox's network namespace,
 so it works with `network=none` and does not publish the application's port on
 the host. WebSocket upgrades support development-server hot reload. Apps that
 prohibit framing can be opened with **New tab**.
+
+Run tabs are restored on reload like terminal tabs: the command reattaches to
+the process still running in the sandbox, and the port it was showing reopens.
 
 Docker Compose enables previews and publishes host port `18081` to container port
 `8081`, using `http://localhost:18081` as its preview base URL. For other deployments,
@@ -520,6 +617,33 @@ headers and ambient cookies are not forwarded. Server-set cookies are renamed
 and restricted to the preview host; applications that directly inspect cookie
 names in JavaScript may need adjustment. Active requests and WebSockets count as
 activity for idle reaping; they do not extend TTL.
+
+#### Transfer acceleration
+
+When the daemon is far from its bucket, the public path to the bucket's region
+is usually the bottleneck rather than the link itself. S3 Transfer
+Acceleration enters AWS at the nearest CloudFront edge and crosses AWS's
+backbone instead, which is worth its per-gigabyte charge exactly when that is
+true.
+
+Enable it on the bucket first, then tick **Use S3 Transfer Acceleration** in
+Settings → Cloud storage (or set `SNAPSHOT_S3_ACCELERATE=true`):
+
+```console
+$ aws s3api put-bucket-accelerate-configuration \
+    --bucket my-sandboxd-backups --accelerate-configuration Status=Enabled
+$ aws s3api get-bucket-accelerate-configuration --bucket my-sandboxd-backups
+{ "Status": "Enabled" }
+```
+
+It is AWS S3 only, so it cannot be combined with a custom endpoint or
+path-style URLs, and the bucket name must not contain dots. The daemon builds
+and signs the accelerate endpoint itself; do not point the endpoint field at
+`s3-accelerate.amazonaws.com`.
+
+Measure before and after. Acceleration helps a slow path to a distant region;
+it does nothing for a bucket the daemon already reaches quickly, and a bucket
+in a nearer region is usually the better fix.
 
 ### Cloud filesystem snapshots
 
@@ -647,7 +771,47 @@ after success or failure. Restoring also creates a private expanded lower layer
 under the new sandbox directory, retained until that sandbox is destroyed. Allow
 host disk space for archives, expanded files, and the sandbox's writable storage.
 
-### API reference
+### MCP server
+
+AI agents reach sandboxd over the Model Context Protocol. The server speaks
+stdio, the transport MCP clients launch a server with, and is a client of the
+REST API like any other: it holds no privileges of its own and can point at a
+daemon on another host.
+
+```console
+$ sandboxdctl mcp --url http://localhost:8080 --api-key "$SANDBOXD_API_KEY"
+```
+
+Register it with an MCP client, for example Claude Code:
+
+```console
+$ claude mcp add sandboxd -- sandboxdctl mcp --url http://localhost:8080
+```
+
+`SANDBOXD_URL` and `SANDBOXD_API_KEY` are read when the flags are omitted.
+Whatever the key is allowed to do, the agent can do; nothing more.
+
+| Tool | What an agent uses it for |
+| --- | --- |
+| `sandbox_create` · `sandbox_list` · `sandbox_destroy` | Get a disposable Linux machine, and give it back |
+| `sandbox_keepalive` | Extend one that is still in use |
+| `sandbox_exec` | Run a command and read its output |
+| `sandbox_start_service` | Start a server that keeps running after the call |
+| `sandbox_write_file` · `sandbox_read_file` · `sandbox_list_files` | Move code and results in and out |
+| `sandbox_ports` | Find what a started server is listening on |
+| `sandbox_preview` | Get a URL to hand to a person |
+
+Two of these exist because of how sandboxes behave, and the tool descriptions
+say so. `sandbox_exec` kills the command's process group when it returns, so
+backgrounding a server there loses it: `sandbox_start_service` runs it in a
+session, whose shell outlives the call. And a preview reaches the sandbox over
+loopback only, so `sandbox_preview` checks what is actually listening and says
+when the URL would not load rather than handing over a dead link.
+
+Sandboxes made through MCP default to a 30-minute lifetime, so an agent that
+forgets to call `sandbox_destroy` does not leave one running indefinitely.
+
+## API reference
 
 The base path is `/api/v1`. The full OpenAPI specification is served at `/openapi.json`
 and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
@@ -668,7 +832,14 @@ and checked in at [`docs/swagger.yaml`](docs/swagger.yaml).
 | `POST /sandboxes/{id}/snapshots` | Save-and-stop, or checkpoint with `keep_running: true` |
 | `PUT /sandboxes/{id}/snapshot-policy` | Configure scheduled/pre-expiry backups and retention |
 | `POST /sandboxes/{id}/previews` · `DELETE /sandboxes/{id}/previews` | Open or revoke an isolated app preview |
+| `GET /sandboxes/{id}/ports` | List the TCP ports listening inside the sandbox |
+| `GET /sandboxes/{id}/changes` | List every path the workload created, edited, or removed |
+| `GET /capacity` | This daemon's identity, free slots, promised limits, and the host's real resources |
+| `DELETE /images/{name}` | Remove a base image here, and cluster-wide if it was promoted |
+| `GET /sandboxes/{id}/previews` | List the previews this daemon holds for a sandbox |
+| `GET /snapshots/progress` | Progress of running backups and restores |
 | `GET /snapshots` · `GET /snapshots/{id}` · `DELETE /snapshots/{id}` | List, inspect progress, or delete cloud snapshots |
+| `POST /snapshots/{id}/image` | Import a snapshot as a base image new sandboxes start from |
 | `GET` · `PUT` · `DELETE /settings/cloud-storage` | Inspect, test-and-save, or disconnect deployment-wide cloud storage |
 | `POST /settings/cloud-storage/test` | Test a candidate connection without saving credentials |
 
@@ -742,8 +913,14 @@ websocat "wss://sandboxd.example.com/api/v1/sandboxes/$ID/terminal?ticket=$TICKE
 
 - **Authentication:** a single-use ticket (`?ticket=`), or `Authorization: Bearer` on the
   upgrade for clients that can set headers.
-- **Query parameters:** `cols`, `rows`, `shell` (`sh` or `bash`), `user`, `cwd`, and
-  `terminal_id` to reattach.
+- **Query parameters:** `cols`, `rows`, `shell` (`sh` or `bash`), `user`, `cwd`,
+  `command`, and `terminal_id` to reattach.
+- **Running one command:** with `command`, the terminal is `<shell> -lc <command>`
+  instead of an interactive shell. It is still a pseudo-terminal, so the command
+  sees a tty, gets `SIGWINCH` on resize and `SIGINT` from Ctrl-C, and the
+  terminal ends with the command's exit status. This is what the console's run
+  tabs use. With `terminal_id`, `command` is ignored: that terminal already has
+  one running.
 - **Binary frames** carry raw terminal bytes in both directions.
 - **Text frames** carry JSON control messages:
   - first, the server sends `{"type":"attached","terminal_id":"term-…"}`
@@ -753,6 +930,127 @@ websocat "wss://sandboxd.example.com/api/v1/sandboxes/$ID/terminal?ticket=$TICKE
   keeps running for `SANDBOX_TERMINAL_DETACH_TIMEOUT`, and reconnecting with
   `terminal_id` replays the last 256 KiB of output. A newer client takes over from an
   older one.
+
+### Listening ports
+
+`GET /api/v1/sandboxes/{id}/ports` reports the TCP sockets accepting connections
+inside the sandbox, so a client can find a development server without being told
+its port:
+
+```console
+$ curl -s -H "$AUTH" $API/sandboxes/$ID/ports | jq -c '.data[]'
+{"port":3000,"address":"0.0.0.0","previewable":true}
+{"port":5432,"address":"192.168.1.2","previewable":false}
+```
+
+The tables are read from the sandbox's own network namespace; nothing runs
+inside the sandbox to answer this. `previewable` is false for a port bound to an
+address a preview cannot dial, because previews connect over loopback only.
+
+### What a sandbox changed
+
+A sandbox's root is an overlay: a writable layer over a read-only base image.
+The kernel already records every path the workload touched in that layer, so
+answering "what did this change?" is a walk of what changed, never a comparison
+against the image. `GET /api/v1/sandboxes/{id}/changes` reads it:
+
+```console
+$ curl -s -H "$AUTH" $API/sandboxes/$ID/changes | jq -c '.data.entries[]'
+{"path":"/etc/apk/world","kind":"modified","type":"file","size":31,"mode":"0644","seeded":false}
+{"path":"/workspace/report.md","kind":"added","type":"file","size":412,"mode":"0644","seeded":false}
+{"path":"/etc/os-release","kind":"deleted","seeded":false}
+```
+
+- `added` is a path the image did not have, `modified` one it had that was then
+  written to, `deleted` one the sandbox removed, and `replaced` a directory
+  emptied of everything the image put in it.
+- A deleted path reports no type, size, mode or timestamp: nothing is left of it
+  to describe.
+- A directory the image already had is not reported for merely holding a changed
+  file. The changed file is.
+- `seeded` marks the handful of paths the daemon writes into every sandbox
+  (`/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf`, the sandbox account, and
+  the directories mounts go on). It says the daemon writes there, not that the
+  workload left it alone, so hide them only when looking for the workload's work.
+- `truncated` reports a sandbox that changed more paths than the daemon will
+  list, which installing a large package tree will do.
+
+The file explorer shows the same list behind its **Changes** button, and the
+`sandbox_changes` MCP tool gives it to an agent.
+
+### Snapshots as base images
+
+`POST /api/v1/snapshots/{id}/image` imports a ready snapshot as a base image, so
+the packages and sources one sandbox prepared become the starting point of every
+sandbox after it:
+
+```console
+$ curl -s -H "$AUTH" -XPOST $API/snapshots/$SNAP/image -d '{"image":"python-ready"}' | jq -r .data.name
+python-ready
+$ curl -s -H "$AUTH" -XPOST $API/sandboxes -d '{"image":"python-ready"}' | jq -r .data.id
+sbx-9c2e4a7b1f3d5e8a0c6b2d4f
+```
+
+It is the restore path without the sandbox: the same archive, the same checks
+that it belongs on this host (format version and architecture), and the same
+confined extraction with ownership shifted into the sandbox id range, setuid
+bits stripped, and device nodes skipped. The name must be free and must match
+`[a-z0-9][a-z0-9._-]{0,63}`; the console offers it as **Use as image** on a
+snapshot card.
+
+Promoting also publishes the name to cloud storage as a reference to the
+snapshot the files came from. A host that has never held the image builds it
+on the first sandbox that asks for it, from that same archive, so **promote
+once and every host can use it**. `GET /images` lists both kinds, with `local`
+saying which are already here:
+
+```console
+$ curl -s -H "$AUTH" $API/images | jq -c '.data[]'
+{"name":"alpine","created_at":"2026-10-12T09:30:00Z","local":true}
+{"name":"python-ready","created_at":"2026-10-30T16:00:00Z","local":false,"architecture":"arm64"}
+```
+
+A first use costs a download and an extraction, about what restoring the
+snapshot would. Afterwards it is a normal local image. Because the image is a
+reference rather than a second copy, deleting the snapshot underneath it is
+refused until the image is removed with `DELETE /images/{name}`.
+
+## Running more than one daemon
+
+A sandbox is kernel state -- namespaces, cgroups, an overlay, a veth -- on
+exactly one machine. So a *fleet* scales horizontally and each sandbox's
+traffic goes to the host that owns it; sandboxes themselves do not move. What
+the daemon provides for that:
+
+- **`GET /capacity`** answers "should the next sandbox be built here?" from
+  facts rather than scraped metrics: the node's name and architecture, whether
+  its engine is usable, free sandbox slots, the limits already promised to
+  running sandboxes, the machine's real CPU, memory and free disk, and the
+  images it can start from. Promised and actual capacity are separate, because
+  a daemon can be configured to promise more than its host can deliver and
+  that decision is not the daemon's to make.
+- **`node` on every sandbox response** names the daemon a sandbox lives on,
+  set from `SANDBOX_NODE_ID` or the hostname.
+- **Promoted images are cluster-wide**, so placement does not depend on which
+  host happens to hold which image (see above).
+- **Listing is per-host and reconstructible.** `GET /sandboxes` and
+  `GET /sandboxes/{id}/previews` are authoritative for the daemon answering
+  them, so a routing layer's map of "which host owns what" is a cache it can
+  rebuild by asking every daemon. It needs no database of its own.
+
+Two things this does not give you, which are worth saying plainly because
+"horizontal scale" invites the opposite assumption:
+
+> [!WARNING]
+> **No live migration.** `CaptureCheckpoint` preserves filesystem state
+> crash-consistently; there is no CRIU, so process memory is never captured.
+> Moving a sandbox between hosts means stop, snapshot, restore. Processes die
+> and terminals end.
+>
+> **No per-sandbox high availability.** Lose a host and you lose its running
+> sandboxes. You get capacity and a smaller blast radius, not availability for
+> any one sandbox. The mitigation is the pre-expiry snapshot policy: turn it on
+> for anything long-lived.
 
 ## Behaviour reference
 
@@ -842,6 +1140,7 @@ settings stop startup with a clear error.
 
 | Variable | Default | Description |
 |---|---|---|
+| `SANDBOX_NODE_ID` | the hostname | Names this daemon among others; reported on every sandbox and by `/capacity` |
 | `SANDBOX_STATE_DIR` | `/var/lib/sandboxd` | Engine state and storage images |
 | `SANDBOX_IMAGES_DIR` | `$SANDBOX_STATE_DIR/images` | Base images |
 | `SANDBOX_DEFAULT_IMAGE` | `alpine` | Image for requests that name none |

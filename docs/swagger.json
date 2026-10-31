@@ -12,6 +12,37 @@
     },
     "basePath": "/",
     "paths": {
+        "/api/v1/capacity": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reports who this daemon is, whether its engine is usable, how many sandbox slots are free, the limits already promised to running sandboxes, what the machine underneath actually has, and which base images it can start from. A sandbox is kernel state on one host, so anything placing work across several daemons chooses from this rather than from scraped metrics. Promised and actual capacity are reported separately: a daemon can be configured to promise more than its host can deliver, and whether to allow that is the caller's decision.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Report this daemon's capacity",
+                "responses": {
+                    "200": {
+                        "description": "This daemon's capacity.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.CapacityEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/images": {
             "get": {
                 "security": [
@@ -42,6 +73,58 @@
                     },
                     "503": {
                         "description": "Sandbox engine unavailable.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/images/{name}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a base image from this host, and from cloud storage if it was promoted from a snapshot, so other hosts stop resolving the name. Sandboxes already running on the image keep their own mount and are unaffected. Removing a promoted image is also what frees the snapshot underneath it for deletion.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Remove a base image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Image name.",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Image removed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.EmptyEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Unusable image name.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "No such image here or in cloud storage.",
                         "schema": {
                             "$ref": "#/definitions/presentation.ErrorResponseDoc"
                         }
@@ -268,6 +351,58 @@
                     },
                     "500": {
                         "description": "Teardown failed; the sandbox is marked failed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sandboxes/{id}/changes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reports every path the sandbox's workload created, wrote to or removed since it started, read straight out of the overlay's writable layer rather than by comparing the sandbox against its base image. Entries marked seeded are paths the daemon writes into every sandbox (hostname, hosts, resolv.conf, the sandbox account, and the directories mounts go on); hide them when looking for the workload's own work. A sandbox that changed more paths than the daemon will list is reported truncated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "List what the sandbox changed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "What the workload changed.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SandboxChangesEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running (sandbox_not_running).",
                         "schema": {
                             "$ref": "#/definitions/presentation.ErrorResponseDoc"
                         }
@@ -918,6 +1053,58 @@
                 }
             }
         },
+        "/api/v1/sandboxes/{id}/previews": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reports the previews this daemon currently serves for the sandbox, with the URL and port of each. Previews are state in the daemon that opened them, like the sandbox itself, so anything routing across several daemons rebuilds preview ownership by asking each of them rather than remembering it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "previews"
+                ],
+                "summary": "List a sandbox's open previews",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Open previews.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.PreviewListEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Sandbox not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Sandbox is not running (sandbox_not_running).",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/sandboxes/{id}/sessions": {
             "get": {
                 "security": [
@@ -1300,7 +1487,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upgrades to a WebSocket attached to a login shell on a pseudo-terminal inside the sandbox: a new one, or with terminal_id a running one (recent output is replayed). Binary messages carry raw terminal input (client to server) and output (server to client). Text messages carry JSON control messages: the server first sends {\"type\":\"attached\",\"terminal_id\":\"...\"}; the client sends {\"type\":\"resize\",\"cols\":N,\"rows\":N} and {\"type\":\"close\"} to end the terminal; the server sends {\"type\":\"exit\",\"exit_code\":N} or {\"type\":\"error\",\"error\":\"...\"} before closing. Closing the socket without \"close\" detaches: the shell keeps running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer attachment takes over from an older one. Authenticate with a bearer key or with a ticket from POST /terminal/tickets; browser Origins must be this server or an allowed CORS origin. While attached, the terminal keeps the sandbox from going idle.",
+                "description": "Upgrades to a WebSocket attached to a login shell on a pseudo-terminal inside the sandbox: a new one, or with terminal_id a running one (recent output is replayed). With command, the shell runs that command line instead of an interactive session, so the terminal is a live process log that still takes Ctrl-C and resizes, and ends with the command. Binary messages carry raw terminal input (client to server) and output (server to client). Text messages carry JSON control messages: the server first sends {\"type\":\"attached\",\"terminal_id\":\"...\"}; the client sends {\"type\":\"resize\",\"cols\":N,\"rows\":N} and {\"type\":\"close\"} to end the terminal; the server sends {\"type\":\"exit\",\"exit_code\":N} or {\"type\":\"error\",\"error\":\"...\"} before closing. Closing the socket without \"close\" detaches: the shell keeps running for SANDBOX_TERMINAL_DETACH_TIMEOUT and can be reattached; a newer attachment takes over from an older one. Authenticate with a bearer key or with a ticket from POST /terminal/tickets; browser Origins must be this server or an allowed CORS origin. While attached, the terminal keeps the sandbox from going idle.",
                 "tags": [
                     "terminal"
                 ],
@@ -1349,6 +1536,12 @@
                         "type": "string",
                         "description": "Login shell; bash falls back to sh when absent.",
                         "name": "shell",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Run this command line on the terminal instead of an interactive shell.",
+                        "name": "command",
                         "in": "query"
                     },
                     {
@@ -1804,6 +1997,88 @@
                 }
             }
         },
+        "/api/v1/snapshots/{id}/image": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Turns a ready snapshot into a base image that later sandboxes can start from, so prepared work (installed packages, checked-out source) costs nothing per start instead of being installed again every time. The archive is downloaded and extracted the way a restore extracts it: ownership shifted into the sandbox id range, setuid bits stripped, device nodes skipped. The snapshot must have been taken on this architecture, and the image name must be free.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "Import a snapshot as a base image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot ID.",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Name for the new base image.",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/presentation.PromoteSnapshotRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "The image that was created.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ImageEnvelopeDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body, unusable image name, or a snapshot from another architecture or format.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API key.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Snapshot not found.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Image name already taken, or the snapshot is not ready.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "429": {
+                        "description": "Maximum concurrent snapshot operations reached.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "503": {
+                        "description": "Filesystem snapshots are disabled.",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
         "/healthz": {
             "get": {
                 "description": "Returns 204 when the process is alive.",
@@ -1839,6 +2114,58 @@
                         "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/presentation.ReadinessResponseDoc"
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{id}/ports": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reports every TCP socket accepting connections inside the sandbox's network namespace, so a client can find a development server without being told its port. Ports not bound to loopback or the unspecified address are listed with previewable false: a preview reaches the sandbox over loopback only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "previews"
+                ],
+                "summary": "List the sandbox's listening TCP ports",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ListeningPortsEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
                         }
                     }
                 }
@@ -2042,6 +2369,37 @@
                     }
                 }
             }
+        },
+        "/snapshots/progress": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reports the progress of every backup and restore running on this host, read from memory alone. Listing snapshots fetches each manifest from cloud storage and is far too expensive to poll at the rate a progress bar wants; this is not. Jobs disappear from the list when they finish, and a host restart leaves none behind.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "List running backups and restores",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.SnapshotJobsEnvelopeDoc"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/presentation.ErrorResponseDoc"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -2060,6 +2418,23 @@
                     "type": "integer",
                     "maximum": 100,
                     "minimum": 1
+                }
+            }
+        },
+        "presentation.AllocatedResponse": {
+            "type": "object",
+            "properties": {
+                "cpu_millis": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "memory_mb": {
+                    "type": "integer",
+                    "example": 1536
+                },
+                "storage_mb": {
+                    "type": "integer",
+                    "example": 1536
                 }
             }
         },
@@ -2090,6 +2465,76 @@
                     "description": "Version is formatted for the deployment environment.",
                     "type": "string",
                     "example": "staging.3fa41bc"
+                }
+            }
+        },
+        "presentation.CapacityEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.CapacityResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.CapacityResponse": {
+            "type": "object",
+            "properties": {
+                "allocated": {
+                    "$ref": "#/definitions/presentation.AllocatedResponse"
+                },
+                "architecture": {
+                    "type": "string",
+                    "example": "arm64"
+                },
+                "host": {
+                    "$ref": "#/definitions/presentation.HostCapacityResponse"
+                },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "alpine",
+                        "python-ready"
+                    ]
+                },
+                "node": {
+                    "type": "string",
+                    "example": "sandboxd-1"
+                },
+                "ready": {
+                    "description": "Ready is false when the engine failed its preflight checks, in which\ncase this host can report capacity it cannot actually use.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "sandboxes": {
+                    "$ref": "#/definitions/presentation.SandboxSlotsResponse"
+                },
+                "snapshots": {
+                    "description": "Snapshots reports whether cloud storage is configured. A host without\nit cannot materialize an image it does not already have.",
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -2129,6 +2574,10 @@
                 "region"
             ],
             "properties": {
+                "accelerate": {
+                    "description": "Accelerate uses S3 Transfer Acceleration, which must also be enabled on\nthe bucket itself. AWS S3 only, and it is billed per gigabyte.",
+                    "type": "boolean"
+                },
                 "access_key_id": {
                     "type": "string",
                     "maxLength": 256
@@ -2176,6 +2625,9 @@
         "presentation.CloudStorageResponse": {
             "type": "object",
             "properties": {
+                "accelerate": {
+                    "type": "boolean"
+                },
                 "auth_mode": {
                     "type": "string"
                 },
@@ -2621,6 +3073,60 @@
                 }
             }
         },
+        "presentation.HostCapacityResponse": {
+            "type": "object",
+            "properties": {
+                "cpu_millis": {
+                    "type": "integer",
+                    "example": 8000
+                },
+                "memory_available_mb": {
+                    "description": "MemoryAvailableMB is the kernel's estimate of what can still be\nallocated without swapping, not simply unused memory.",
+                    "type": "integer",
+                    "example": 11020
+                },
+                "memory_mb": {
+                    "type": "integer",
+                    "example": 16384
+                },
+                "storage_free_mb": {
+                    "type": "integer",
+                    "example": 51200
+                },
+                "storage_total_mb": {
+                    "type": "integer",
+                    "example": 65536
+                }
+            }
+        },
+        "presentation.ImageEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.ImageResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
         "presentation.ImageListEnvelopeDoc": {
             "type": "object",
             "properties": {
@@ -2651,8 +3157,18 @@
         "presentation.ImageResponse": {
             "type": "object",
             "properties": {
+                "architecture": {
+                    "description": "Architecture is set for an image held in cloud storage, which can only\nbe materialized on a host of the same architecture.",
+                    "type": "string",
+                    "example": "arm64"
+                },
                 "created_at": {
                     "type": "string"
+                },
+                "local": {
+                    "description": "Local reports whether this host already holds the image. One that is\nnot local is still usable: the first sandbox asking for it downloads\nand imports it, which takes about as long as restoring a snapshot.",
+                    "type": "boolean",
+                    "example": true
                 },
                 "name": {
                     "type": "string",
@@ -2689,6 +3205,52 @@
                 "storage_mb": {
                     "type": "integer",
                     "example": 512
+                }
+            }
+        },
+        "presentation.ListeningPortResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "description": "Address is the address the socket is bound to, as the sandbox sees it.",
+                    "type": "string",
+                    "example": "0.0.0.0"
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "previewable": {
+                    "description": "Previewable reports whether a preview can reach this port. Previews\nconnect over the sandbox's loopback interface, so a server bound to\nanother address is listed but cannot be previewed until it also\nlistens on 127.0.0.1 or 0.0.0.0.",
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "presentation.ListeningPortsEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.ListeningPortResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
                 }
             }
         },
@@ -2743,6 +3305,47 @@
                 }
             }
         },
+        "presentation.PreviewListEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/preview.Session"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.PromoteSnapshotRequest": {
+            "type": "object",
+            "required": [
+                "image"
+            ],
+            "properties": {
+                "image": {
+                    "description": "Image must match [a-z0-9][a-z0-9._-]{0,63} and must not already exist.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "python-ready"
+                }
+            }
+        },
         "presentation.ReadinessResponseDoc": {
             "type": "object",
             "properties": {
@@ -2776,6 +3379,92 @@
             "properties": {
                 "id": {
                     "type": "string"
+                }
+            }
+        },
+        "presentation.SandboxChangeResponse": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "description": "Kind is added for a path the image did not have, modified for one it\nhad that was then written to, deleted for one the sandbox removed, and\nreplaced for a directory emptied of everything the image put in it.",
+                    "type": "string",
+                    "enum": [
+                        "added",
+                        "modified",
+                        "deleted",
+                        "replaced"
+                    ],
+                    "example": "added"
+                },
+                "mode": {
+                    "type": "string",
+                    "example": "0644"
+                },
+                "modified_at": {
+                    "description": "ModifiedAt is absent for a deletion, for the same reason as Type.",
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/root/app.py"
+                },
+                "seeded": {
+                    "description": "Seeded marks a path the daemon writes into every sandbox: its hostname,\nhosts and resolv.conf, the sandbox account, and the directories mounts\ngo on. It reports that the daemon writes there, not that the workload\nleft it alone, so hide these only when looking for the workload's work.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 128
+                },
+                "type": {
+                    "description": "Type is file, dir, symlink or special. A deletion has none: the entry\nis gone, and only the fact that it went is recorded.",
+                    "type": "string",
+                    "example": "file"
+                }
+            }
+        },
+        "presentation.SandboxChangesEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.SandboxChangesResponse"
+                        }
+                    ]
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
+        "presentation.SandboxChangesResponse": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.SandboxChangeResponse"
+                    }
+                },
+                "truncated": {
+                    "description": "Truncated reports that the sandbox changed more paths than the daemon\nis willing to list, so what follows is a prefix and not the whole set.",
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },
@@ -2893,6 +3582,11 @@
                 "next_snapshot_at": {
                     "type": "string"
                 },
+                "node": {
+                    "description": "Node is the daemon this sandbox lives on. A sandbox is kernel state on\none machine; anything routing across several needs to know which.",
+                    "type": "string",
+                    "example": "sandboxd-1"
+                },
                 "snapshot_in_progress": {
                     "type": "boolean"
                 },
@@ -2912,6 +3606,19 @@
                 },
                 "stopped_at": {
                     "type": "string"
+                }
+            }
+        },
+        "presentation.SandboxSlotsResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "max": {
+                    "type": "integer",
+                    "example": 64
                 }
             }
         },
@@ -3120,6 +3827,45 @@
                 }
             }
         },
+        "presentation.SnapshotJobResponse": {
+            "type": "object",
+            "properties": {
+                "progress": {
+                    "$ref": "#/definitions/presentation.SnapshotProgressResponse"
+                },
+                "snapshot_id": {
+                    "type": "string",
+                    "example": "snap-4f1c2a9b8e7d6c5b4a3f2e1d"
+                }
+            }
+        },
+        "presentation.SnapshotJobsEnvelopeDoc": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the HTTP status code repeated in the response body.",
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "description": "Data is the response payload.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presentation.SnapshotJobResponse"
+                    }
+                },
+                "entity": {
+                    "description": "Entity identifies the API domain that produced the response.",
+                    "type": "string",
+                    "example": "sandbox"
+                },
+                "message": {
+                    "description": "Message is the client-facing success message.",
+                    "type": "string",
+                    "example": "sandbox request success"
+                }
+            }
+        },
         "presentation.SnapshotListEnvelopeDoc": {
             "type": "object",
             "properties": {
@@ -3147,6 +3893,31 @@
                 }
             }
         },
+        "presentation.SnapshotProgressResponse": {
+            "type": "object",
+            "properties": {
+                "bytes_done": {
+                    "description": "BytesDone counts archive bytes finished in this phase.",
+                    "type": "integer",
+                    "example": 50331648
+                },
+                "bytes_total": {
+                    "description": "BytesTotal is the archive size, or 0 while capture is still deciding it.",
+                    "type": "integer",
+                    "example": 202375168
+                },
+                "operation": {
+                    "description": "Operation is backup or restore.",
+                    "type": "string",
+                    "example": "backup"
+                },
+                "phase": {
+                    "description": "Phase is capturing, uploading or verifying for a backup, and\ndownloading or importing for a restore.",
+                    "type": "string",
+                    "example": "uploading"
+                }
+            }
+        },
         "presentation.SnapshotResponse": {
             "type": "object",
             "properties": {
@@ -3170,6 +3941,14 @@
                 },
                 "mode": {
                     "type": "string"
+                },
+                "progress": {
+                    "description": "Progress is present only while a backup or restore of this snapshot is\nrunning on this host. It is live state, not part of the stored manifest.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presentation.SnapshotProgressResponse"
+                        }
+                    ]
                 },
                 "sandbox_id": {
                     "type": "string"

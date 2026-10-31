@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -38,6 +39,7 @@ type SnapshotConfig struct {
 	Endpoint      string
 	Prefix        string
 	PathStyle     bool
+	Accelerate    bool
 	TempDir       string
 	Timeout       time.Duration
 	MaxBytes      int64
@@ -83,6 +85,9 @@ type TelemetryConfig struct {
 // SandboxConfig tunes the sandbox engine: where state lives, how sandboxes map
 // onto host identities, and the default/maximum resources a caller may request.
 type SandboxConfig struct {
+	// NodeID names this daemon among others. A sandbox lives on exactly one
+	// host, so anything routing to a fleet needs to know which one answered.
+	NodeID string
 	// StateDir holds per-sandbox runtime directories (rootfs mounts, agent sockets).
 	StateDir string
 	// ImagesDir holds the uid-shifted base root filesystems, one directory per image.
@@ -157,6 +162,18 @@ type NetworkConfig struct {
 	IPForward  bool
 }
 
+// nodeID defaults to the hostname, which is already distinct per host in
+// every deployment that runs more than one daemon.
+func nodeID() string {
+	if id := getEnv("SANDBOX_NODE_ID", ""); id != "" {
+		return id
+	}
+	if host, err := os.Hostname(); err == nil && host != "" {
+		return host
+	}
+	return "sandboxd"
+}
+
 func Load() (Config, error) {
 	_ = godotenv.Load()
 	appEnv := getEnv("APP_ENV", "development")
@@ -202,6 +219,7 @@ func Load() (Config, error) {
 			DefaultImage: getEnv("SANDBOX_DEFAULT_IMAGE", "alpine"),
 			CgroupRoot:   getEnv("SANDBOX_CGROUP_ROOT", ""),
 			MaxSandboxes: getEnvAsInt("SANDBOX_MAX_SANDBOXES", 64),
+			NodeID:       nodeID(),
 
 			DefaultCPUMillis: getEnvAsInt("SANDBOX_DEFAULT_CPU_MILLIS", 1000),
 			MaxCPUMillis:     getEnvAsInt("SANDBOX_MAX_CPU_MILLIS", 4000),
@@ -254,6 +272,7 @@ func Load() (Config, error) {
 			Endpoint:      getEnv("SNAPSHOT_S3_ENDPOINT", ""),
 			Prefix:        getEnv("SNAPSHOT_S3_PREFIX", "sandboxd/snapshots"),
 			PathStyle:     getEnvAsBool("SNAPSHOT_S3_PATH_STYLE", false),
+			Accelerate:    getEnvAsBool("SNAPSHOT_S3_ACCELERATE", false),
 			TempDir:       getEnv("SNAPSHOT_TEMP_DIR", stateDir+"/snapshot-tmp"),
 			Timeout:       getEnvAsDuration("SNAPSHOT_TIMEOUT", 30*time.Minute),
 			MaxBytes:      int64(getEnvAsInt("SNAPSHOT_MAX_BYTES", 4<<30)),

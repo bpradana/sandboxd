@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -175,6 +176,22 @@ func (m *Manager) Create(sandboxID string, port int, expires time.Time, activity
 	}
 	m.entries[id] = e
 	return e.Session, nil
+}
+
+// List reports the live previews of one sandbox. A preview is process-local
+// state, like the sandbox it proxies to, so anything routing across several
+// daemons rebuilds its map by asking each of them.
+func (m *Manager) List(sandboxID string) []Session {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	sessions := make([]Session, 0, len(m.entries))
+	for _, e := range m.entries {
+		if e.sandboxID == sandboxID && e.ctx.Err() == nil {
+			sessions = append(sessions, e.Session)
+		}
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Port < sessions[j].Port })
+	return sessions
 }
 
 func (m *Manager) Revoke(sandboxID, id string) bool {

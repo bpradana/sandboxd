@@ -10,8 +10,12 @@ import (
 	"github.com/bpradana/sandboxd/internal/presentation"
 )
 
-func toSandboxResponse(sb *model.Sandbox) *presentation.SandboxResponse {
+// toSandboxResponse is a method so every response carries the node the
+// sandbox lives on: a sandbox is kernel state on exactly one machine, and a
+// caller holding an ID needs to know which one.
+func (s *service) toSandboxResponse(sb *model.Sandbox) *presentation.SandboxResponse {
 	return &presentation.SandboxResponse{
+		Node:           s.sandbox.NodeID,
 		SnapshotPolicy: sb.SnapshotPolicy, SnapshotInProgress: sb.SnapshotInProgress,
 		NextSnapshotAt: optionalTime(sb.NextSnapshotAt), LastSnapshotAt: optionalTime(sb.LastSnapshotAt), LastSnapshotError: sb.LastSnapshotError,
 		ID:        sb.ID,
