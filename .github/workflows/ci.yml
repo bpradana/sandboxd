@@ -43,7 +43,7 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./... && GOOS=darwin go vet ./...
       - run: go test -race -count=1 ./...
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: File explorer interaction tests
